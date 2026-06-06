@@ -1,6 +1,6 @@
-# 🐍 Yeonam Tester MVP - AI Server (FastAPI)
+# 🐍 RAG-Combination (Yeonam Tester AI Server)
 
-연암 테스터(Yeonam Tester) MVP의 비동기 문서 분석 및 AI 테스트 케이스/보고서 생성을 전담하는 경량 FastAPI 백앤드 서비스 모듈입니다.
+기존 파이프라인에 RAG를 결합하고 안정적으로 결과를 출력하는지 확인하는 AI 분석 서버(FastAPI) 모듈입니다.
 
 ---
 
@@ -57,7 +57,7 @@ pip install -r requirements.txt
 ```
 
 ### 2. 환경변수 설정
-`.env.example` 파일을 복사하여 `.env` 파일을 생성합니다.
+`.env.example` 파일을 copy하여 `.env` 파일을 생성합니다.
 
 ```env
 MOCK_LLM=true                     # 로컬 E2E 테스트 및 오프라인 데모 시 true 설정 권장
