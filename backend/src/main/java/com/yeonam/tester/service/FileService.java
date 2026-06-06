@@ -120,8 +120,16 @@ public class FileService {
             s3Client.putObject(putOb, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
         } catch (IOException e) {
             throw new RuntimeException("Failed to read upload file input stream", e);
-        } catch (S3Exception e) {
-            throw new RuntimeException("S3 upload failed: " + e.getMessage(), e);
+        } catch (Exception e) {
+            System.err.println("S3 upload failed, falling back to local storage: " + e.getMessage());
+            try {
+                java.nio.file.Path localPath = java.nio.file.Paths.get("data", "documents", fileId + "_" + originalFilename);
+                java.nio.file.Files.createDirectories(localPath.getParent());
+                java.nio.file.Files.copy(file.getInputStream(), localPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                s3Path = "local://" + localPath.toString();
+            } catch (IOException ioException) {
+                throw new RuntimeException("Failed to save file locally as fallback", ioException);
+            }
         }
 
         // 3. Save to DB
@@ -160,8 +168,16 @@ public class FileService {
                     .build();
 
             s3Client.putObject(putOb, RequestBody.fromBytes(bytes));
-        } catch (S3Exception e) {
-            throw new RuntimeException("S3 raw text upload failed: " + e.getMessage(), e);
+        } catch (Exception e) {
+            System.err.println("S3 raw text upload failed, falling back to local storage: " + e.getMessage());
+            try {
+                java.nio.file.Path localPath = java.nio.file.Paths.get("data", "documents", fileId + "_" + fileName);
+                java.nio.file.Files.createDirectories(localPath.getParent());
+                java.nio.file.Files.write(localPath, bytes);
+                s3Path = "local://" + localPath.toString();
+            } catch (IOException ioException) {
+                throw new RuntimeException("Failed to save raw text file locally as fallback", ioException);
+            }
         }
 
         UploadedFile uploadedFile = UploadedFile.builder()
@@ -199,10 +215,19 @@ public class FileService {
      * Downloads file bytes from S3
      */
     public byte[] downloadFileBytes(UploadedFile uploadedFile) {
+        String s3Path = uploadedFile.getS3Path();
+        if (s3Path != null && s3Path.startsWith("local://")) {
+            try {
+                java.nio.file.Path localPath = java.nio.file.Paths.get(s3Path.substring(8));
+                return java.nio.file.Files.readAllBytes(localPath);
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to read local file: " + s3Path, e);
+            }
+        }
         try {
             GetObjectRequest getOb = GetObjectRequest.builder()
                     .bucket(documentsBucket)
-                    .key(uploadedFile.getS3Path())
+                    .key(s3Path)
                     .build();
 
             ResponseBytes<GetObjectResponse> objectBytes = s3Client.getObjectAsBytes(getOb);
@@ -216,6 +241,16 @@ public class FileService {
      * Deletes file from S3 bucket
      */
     public void deleteFileFromS3(String s3Path) {
+        if (s3Path != null && s3Path.startsWith("local://")) {
+            try {
+                java.nio.file.Path localPath = java.nio.file.Paths.get(s3Path.substring(8));
+                java.nio.file.Files.deleteIfExists(localPath);
+                System.out.println("Deleted local file: " + s3Path);
+            } catch (IOException e) {
+                System.err.println("Failed to delete local file: " + s3Path + ". Error: " + e.getMessage());
+            }
+            return;
+        }
         try {
             DeleteObjectRequest deleteOb = DeleteObjectRequest.builder()
                     .bucket(documentsBucket)

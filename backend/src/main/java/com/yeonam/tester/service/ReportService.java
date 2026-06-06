@@ -81,7 +81,7 @@ public class ReportService {
         String markdown = renderEngine.renderMarkdown(data);
         byte[] bytes = markdown.getBytes(StandardCharsets.UTF_8);
 
-        // Upload to S3 (reportsBucket)
+        // Upload to S3 (reportsBucket) or Local Fallback
         try {
             PutObjectRequest putOb = PutObjectRequest.builder()
                     .bucket(reportsBucket)
@@ -91,7 +91,15 @@ public class ReportService {
 
             s3Client.putObject(putOb, RequestBody.fromBytes(bytes));
         } catch (Exception e) {
-            throw new RuntimeException("S3 report upload failed: " + e.getMessage(), e);
+            System.err.println("S3 report upload failed, falling back to local storage: " + e.getMessage());
+            try {
+                java.nio.file.Path localPath = java.nio.file.Paths.get("data", "reports", analysisId, reportId + "." + extension);
+                java.nio.file.Files.createDirectories(localPath.getParent());
+                java.nio.file.Files.write(localPath, bytes);
+                s3Path = "local://" + localPath.toString();
+            } catch (java.io.IOException ioException) {
+                throw new RuntimeException("Failed to save report locally as fallback", ioException);
+            }
         }
 
         // Record in DB
@@ -166,16 +174,26 @@ public class ReportService {
                 .orElseThrow(() -> new IllegalArgumentException("Report not found: " + reportId));
 
         String content;
+        String s3Path = report.getS3Path();
         if ("PDF".equals(report.getFormat())) {
             // For PDF, we can preview the markdown source compiled for this analysis
             Map<String, Object> data = assemblyService.assembleReportData(report.getAnalysisJob().getAnalysisId());
             content = renderEngine.renderMarkdown(data);
+        } else if (s3Path != null && s3Path.startsWith("local://")) {
+            try {
+                java.nio.file.Path localPath = java.nio.file.Paths.get(s3Path.substring(8));
+                content = java.nio.file.Files.readString(localPath, StandardCharsets.UTF_8);
+            } catch (Exception e) {
+                System.err.println("Preview: Local report file lost. Auto-regenerating preview...");
+                Map<String, Object> data = assemblyService.assembleReportData(report.getAnalysisJob().getAnalysisId());
+                content = renderEngine.renderMarkdown(data);
+            }
         } else {
             // Download markdown directly from S3
             try {
                 GetObjectRequest getOb = GetObjectRequest.builder()
                         .bucket(reportsBucket)
-                        .key(report.getS3Path())
+                        .key(s3Path)
                         .build();
 
                 ResponseBytes<?> responseBytes = s3Client.getObjectAsBytes(getOb);
@@ -205,15 +223,25 @@ public class ReportService {
         Report report = reportRepository.findById(reportId)
                 .orElseThrow(() -> new IllegalArgumentException("Report not found: " + reportId));
 
-        // Delete from S3
-        try {
-            DeleteObjectRequest deleteOb = DeleteObjectRequest.builder()
-                    .bucket(reportsBucket)
-                    .key(report.getS3Path())
-                    .build();
-            s3Client.deleteObject(deleteOb);
-        } catch (Exception e) {
-            System.err.println("Failed to delete report physical file from S3: " + e.getMessage());
+        // Delete from S3 or Local
+        String s3Path = report.getS3Path();
+        if (s3Path != null && s3Path.startsWith("local://")) {
+            try {
+                java.nio.file.Path localPath = java.nio.file.Paths.get(s3Path.substring(8));
+                java.nio.file.Files.deleteIfExists(localPath);
+            } catch (Exception e) {
+                System.err.println("Failed to delete local report file: " + e.getMessage());
+            }
+        } else {
+            try {
+                DeleteObjectRequest deleteOb = DeleteObjectRequest.builder()
+                        .bucket(reportsBucket)
+                        .key(s3Path)
+                        .build();
+                s3Client.deleteObject(deleteOb);
+            } catch (Exception e) {
+                System.err.println("Failed to delete report physical file from S3: " + e.getMessage());
+            }
         }
 
         // Delete from DB

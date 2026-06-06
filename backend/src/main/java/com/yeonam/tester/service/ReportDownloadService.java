@@ -57,30 +57,46 @@ public class ReportDownloadService {
 
         byte[] mdBytes = null;
         boolean fileExists = true;
-        try {
-            // Check if file exists in S3
-            HeadObjectRequest headOb = HeadObjectRequest.builder()
-                    .bucket(reportsBucket)
-                    .key(report.getS3Path())
-                    .build();
-            s3Client.headObject(headOb);
-        } catch (NoSuchKeyException e) {
-            fileExists = false;
-        } catch (Exception e) {
-            fileExists = false;
-        }
+        String s3Path = report.getS3Path();
 
-        if (fileExists) {
+        if (s3Path != null && s3Path.startsWith("local://")) {
             try {
-                GetObjectRequest getOb = GetObjectRequest.builder()
-                        .bucket(reportsBucket)
-                        .key(report.getS3Path())
-                        .build();
-                ResponseBytes<?> responseBytes = s3Client.getObjectAsBytes(getOb);
-                mdBytes = responseBytes.asByteArray();
+                java.nio.file.Path localPath = java.nio.file.Paths.get(s3Path.substring(8));
+                if (java.nio.file.Files.exists(localPath)) {
+                    mdBytes = java.nio.file.Files.readAllBytes(localPath);
+                } else {
+                    fileExists = false;
+                }
             } catch (Exception e) {
-                System.err.println("Failed to read report from S3: " + e.getMessage() + ". Regenerating as fallback...");
+                System.err.println("Failed to read report from local storage: " + e.getMessage());
                 fileExists = false;
+            }
+        } else {
+            try {
+                // Check if file exists in S3
+                HeadObjectRequest headOb = HeadObjectRequest.builder()
+                        .bucket(reportsBucket)
+                        .key(s3Path)
+                        .build();
+                s3Client.headObject(headOb);
+            } catch (NoSuchKeyException e) {
+                fileExists = false;
+            } catch (Exception e) {
+                fileExists = false;
+            }
+
+            if (fileExists) {
+                try {
+                    GetObjectRequest getOb = GetObjectRequest.builder()
+                            .bucket(reportsBucket)
+                            .key(s3Path)
+                            .build();
+                    ResponseBytes<?> responseBytes = s3Client.getObjectAsBytes(getOb);
+                    mdBytes = responseBytes.asByteArray();
+                } catch (Exception e) {
+                    System.err.println("Failed to read report from S3: " + e.getMessage() + ". Regenerating as fallback...");
+                    fileExists = false;
+                }
             }
         }
 
@@ -95,15 +111,22 @@ public class ReportDownloadService {
             Map<String, Object> data = assemblyService.assembleReportData(analysisId, tcIds);
             markdown = renderEngine.renderMarkdown(data);
 
-            // Upload regenerated markdown file back to S3
+            // Upload regenerated markdown file back to S3 or Local
             try {
                 byte[] uploadBytes = markdown.getBytes(StandardCharsets.UTF_8);
-                PutObjectRequest putOb = PutObjectRequest.builder()
-                        .bucket(reportsBucket)
-                        .key(report.getS3Path())
-                        .contentType("text/markdown")
-                        .build();
-                s3Client.putObject(putOb, RequestBody.fromBytes(uploadBytes));
+                if (s3Path != null && s3Path.startsWith("local://")) {
+                    java.nio.file.Path localPath = java.nio.file.Paths.get(s3Path.substring(8));
+                    java.nio.file.Files.createDirectories(localPath.getParent());
+                    java.nio.file.Files.write(localPath, uploadBytes);
+                    System.out.println("Regenerated report saved locally: " + s3Path);
+                } else {
+                    PutObjectRequest putOb = PutObjectRequest.builder()
+                            .bucket(reportsBucket)
+                            .key(s3Path)
+                            .contentType("text/markdown")
+                            .build();
+                    s3Client.putObject(putOb, RequestBody.fromBytes(uploadBytes));
+                }
             } catch (Exception e) {
                 System.err.println("Failed to upload regenerated report: " + e.getMessage());
             }
