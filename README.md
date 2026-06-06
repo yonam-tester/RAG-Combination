@@ -81,14 +81,39 @@ docker-compose up -d
    ```bash
    pip install -r requirements.txt
    ```
-3. 로컬 테스트 및 API 비용 절약을 위해 기본적으로 **Mock 모드**로 작동합니다. 실제 OpenAI API를 연동하려면 `.env` 파일을 다음과 같이 구성하세요.
-   ```env
-   MOCK_RAG=false
-   MOCK_LLM=false
-   LLM_MODEL=gpt-4o-mini
-   OPENAI_API_KEY=your_actual_openai_api_key
+3. **[필수] 임베딩 정제 지식베이스 구축:**
+   로컬 RAG 검증 및 연동 테스트를 위해, 루트의 `embedded.zip`에 포함된 정제용 QA 지식 파일들을 압축 해제하고 청크 빌드 스크립트를 먼저 가동해야 합니다.
+   ```bash
+   # 1) embedded.zip 파일 압축 해제 (rag_server 내부에 embedded/ 구조 생성)
+   unzip -o ../embedded.zip -d .
+   
+   # 2) 전처리 스크립트를 기동하여 정제 청크 파일(rag_chunks.jsonl) 생성
+   python embedded/generate_rag_chunks.py
    ```
-4. Uvicorn 개발 서버를 시작합니다.
+   *정제 스크립트 실행이 완료되면 `rag_server/rag_chunks.jsonl`이 빌드되며, `rag_server`는 구동 시 이 정제 파일을 지식베이스 소스로 감지해 자동으로 로드합니다.*
+
+4. **환경 설정 (.env) 구성:**
+   로컬 테스트 목적에 맞춰 `rag_server/.env` 파일의 모드 변수를 구성합니다.
+   
+   * **로컬 RAG 검증 모드 (추천 - 외부 API 비용 $0):**
+     실제 업로드 문서 다운로드/파싱 및 RAG 지식베이스 검색(정제된 청크 출처 매핑 포함)을 동작시키되, LLM 완성은 API 키 입력 없이 모의동작(Mock)으로 안전하게 처리합니다.
+     ```env
+     MOCK_RAG=false
+     MOCK_LLM=true
+     BACKEND_URL=http://localhost:8080
+     ```
+   
+   * **실제 LLM 연동 모드 (실제 OpenAI API 호출):**
+     실제 OpenAI API 및 dynamic API Key 검증을 테스트하려면 아래와 같이 구성합니다.
+     ```env
+     MOCK_RAG=false
+     MOCK_LLM=false
+     LLM_MODEL=gpt-4o-mini
+     BACKEND_URL=http://localhost:8080
+     ```
+     *(이 경우 프론트엔드 UI의 API Key 입력란에 실제 유효한 OpenAI API Key를 기입해야 합니다.)*
+
+5. Uvicorn 개발 서버를 시작합니다.
    ```bash
    uvicorn main:app --host 0.0.0.0 --port 8000 --reload
    ```

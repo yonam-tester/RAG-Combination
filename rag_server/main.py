@@ -96,6 +96,16 @@ async def process_job(job_data: dict):
                 tc["requirementText"] = req_text
                 # Attach evidence list (Task 8.2 & 8.3 preparation)
                 tc["evidence_list"] = limited_evidences
+                
+                # Format testSteps to List[str] if it is a String
+                if "testSteps" in tc:
+                    if isinstance(tc["testSteps"], str):
+                        tc["testSteps"] = [s.strip() for s in tc["testSteps"].split("\n") if s.strip()]
+                    elif not isinstance(tc["testSteps"], list):
+                        tc["testSteps"] = []
+                else:
+                    tc["testSteps"] = []
+                    
                 test_cases.append(tc)
                 
         # 8. Webhook callback to Spring Boot

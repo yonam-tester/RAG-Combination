@@ -32,9 +32,29 @@ DEFAULT_KB = [
 
 def load_knowledge_base() -> List[Dict]:
     """
-    Loads all QA knowledge cards from all JSON files in the rag_server/knowledge_base folder.
-    Falls back to static templates if folder is empty or files are missing.
+    Loads all QA knowledge cards. Prioritizes the refined rag_chunks.jsonl file.
+    Falls back to individual JSON files in the rag_server/knowledge_base folder.
     """
+    chunks_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rag_chunks.jsonl")
+    if os.path.exists(chunks_path):
+        try:
+            cards = []
+            with open(chunks_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        item = json.loads(line)
+                        cards.append({
+                            "chunk_id": item.get("chunk_id", "QA-0000"),
+                            "category": item.get("metadata", {}).get("keywords", ["General"])[0] if item.get("metadata", {}).get("keywords") else "General",
+                            "title": item.get("section_title", "General"),
+                            "content": item.get("content", ""),
+                            "source_file": item.get("source_file", "unknown_cards.json")
+                        })
+            logger.info(f"Loaded {len(cards)} refined knowledge chunks from {chunks_path}")
+            return cards
+        except Exception as e:
+            logger.error(f"Failed to load refined knowledge chunks from {chunks_path}: {str(e)}")
+
     kb_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "knowledge_base")
     
     # Auto-create directory if it doesn't exist
@@ -200,9 +220,9 @@ def retrieve_evidences(query: str, threshold: float = 0.35) -> List[Dict]:
         if overlap_score > 0.1: # Small threshold for card match
             score = 0.4 + (overlap_score * 0.5) # Rescale score
             kb_results.append({
-                "chunk_id": f"CHNK-KB{idx:03d}",
-                "text": f"[{card['title']}] {card['content']}",
-                "source_name": "atlassian_knowledge_cards_refined.json",
+                "chunk_id": card.get("chunk_id") or f"CHNK-KB{idx:03d}",
+                "text": card["content"] if (card["content"].startswith("[") or "제목:" in card["content"]) else f"[{card['title']}] {card['content']}",
+                "source_name": card.get("source_file") or "atlassian_knowledge_cards_refined.json",
                 "source_section": card["category"],
                 "score": score
             })
