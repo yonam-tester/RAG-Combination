@@ -1,0 +1,264 @@
+[
+  {
+    "id": "cypress_bp_001",
+    "title": "테스트 전용 선택자(data-cy) 사용으로 선택자 깨짐 방지",
+    "source_name": "Cypress Best Practices",
+    "source_url": "https://docs.cypress.io/app/core-concepts/best-practices",
+    "category": "test_technique",
+    "technique": "DOM 요소 선택 전략",
+    "apply_when": [
+      "Cypress 또는 다른 E2E 테스트 도구로 UI를 테스트하는 경우",
+      "CSS 클래스나 ID가 리팩토링·디자인 변경으로 자주 바뀌는 경우"
+    ],
+    "qa_perspective": [
+      "CSS 클래스(.btn, .active), ID(#main), 태그명(button)만으로 요소를 선택하면 스타일 변경 시 테스트가 깨지는지 확인",
+      "테스트 전용 data-cy, data-testid 속성이 HTML에 부여되어 있는지 확인",
+      "cy.contains()는 텍스트 변경이 곧 기능 변화를 의미할 때만 선택적으로 사용하는지 확인"
+    ],
+    "risk_type": "BRITTLE_SELECTOR",
+    "tdd_hint": "cy.get('[data-cy=\"submit\"]').click() 형태로 테스트를 먼저 작성하고, HTML에 data-cy 속성을 추가하는 순서로 개발한다.",
+    "example_scenario": "학생 팀 프로젝트의 로그인 폼 제출 버튼을 cy.get('button.btn-primary')로 선택하면 CSS 클래스 변경 시 테스트가 깨진다. 대신 버튼에 data-cy=\"login-submit\"을 추가하고 cy.get('[data-cy=\"login-submit\"]').click()으로 변경한다.",
+    "evidence": "Cypress 공식 문서: 'Using highly brittle selectors that are subject to change'를 피하고, data-* 속성을 사용하여 테스트와 구현 세부사항을 분리하도록 권장한다.",
+    "tags": ["cypress", "e2e", "selector", "data-cy", "brittle-test", "frontend"]
+  },
+  {
+    "id": "cypress_bp_002",
+    "title": "테스트 간 의존성 제거 - 각 테스트는 독립 실행 가능해야 한다",
+    "source_name": "Cypress Best Practices",
+    "source_url": "https://docs.cypress.io/app/core-concepts/best-practices",
+    "category": "qa_concept",
+    "technique": "테스트 독립성(Test Isolation)",
+    "apply_when": [
+      "여러 it() 블록이 이전 테스트 실행 결과에 의존하도록 작성된 경우",
+      "테스트를 순서 없이 단독 실행했을 때 실패하는 경우"
+    ],
+    "qa_perspective": [
+      "it.only()로 특정 테스트 하나만 단독 실행했을 때 통과하는지 확인",
+      "테스트 실행 순서를 바꿔도 동일한 결과가 나오는지 확인",
+      "이전 테스트에서 생성된 DOM 상태나 데이터에 이후 테스트가 의존하지 않는지 확인"
+    ],
+    "risk_type": "TEST_COUPLING",
+    "tdd_hint": "여러 it()에 분산된 단계를 하나의 it()으로 합치거나, beforeEach()에서 공통 준비 상태를 만든 후 각 it()을 독립적으로 작성한다.",
+    "example_scenario": "학생 팀 프로젝트에서 '로그인 페이지 방문', '이메일 입력', '로그인 버튼 클릭'을 각각 별도 it()으로 나눈 경우, '이메일 입력' 테스트만 단독 실행하면 페이지가 없어 실패한다. 세 단계를 하나의 it('로그인이 성공한다')로 합치거나 beforeEach에서 cy.visit()을 수행해야 한다.",
+    "evidence": "Cypress 공식 문서: 'Coupling multiple tests together'를 피하고, 테스트를 독립적으로 실행 가능하게 만들어야 한다고 명시한다.",
+    "tags": ["cypress", "e2e", "test-isolation", "beforeEach", "independence"]
+  },
+  {
+    "id": "cypress_bp_003",
+    "title": "cy.wait(숫자) 금지 - 조건 기반 대기로 대체",
+    "source_name": "Cypress Best Practices",
+    "source_url": "https://docs.cypress.io/app/core-concepts/best-practices",
+    "category": "test_technique",
+    "technique": "명시적 대기(Explicit Wait) / 요청 인터셉트",
+    "apply_when": [
+      "비동기 API 호출 결과를 기다려야 하는 경우",
+      "페이지 전환 또는 데이터 로딩 완료를 기다려야 하는 경우",
+      "cy.wait(3000) 형태의 고정 대기가 테스트 코드에 있는 경우"
+    ],
+    "qa_perspective": [
+      "cy.wait(숫자) 사용 시 CI 환경에서 서버 응답이 느릴 때 테스트가 간헐적으로 실패하는지 확인",
+      "cy.intercept()로 요청에 별칭을 부여하고 cy.wait('@별칭')으로 응답 완료를 기다리는지 확인",
+      "should() 어설션이 자동으로 조건이 충족될 때까지 재시도하는 방식을 활용하는지 확인"
+    ],
+    "risk_type": "FLAKY_TEST",
+    "tdd_hint": "cy.intercept('GET', '/api/users').as('getUsers')를 먼저 선언하고, 액션 후 cy.wait('@getUsers')를 작성하여 실제 응답 완료 시점을 기다리도록 테스트를 설계한다.",
+    "example_scenario": "학생 팀 프로젝트에서 '데이터 불러오기' 버튼 클릭 후 cy.wait(4000)으로 대기하면 서버가 빠를 때 불필요하게 느리고 느릴 때 깨진다. cy.intercept('GET', '/api/data').as('loadData')로 인터셉트 후 cy.wait('@loadData')로 대체하면 실제 응답 완료 시점에 정확히 반응한다.",
+    "evidence": "Cypress 공식 문서: 'Waiting for arbitrary time periods using cy.wait(Number)'를 피하고, 경로 별칭(route alias) 또는 어설션을 통한 조건 기반 대기를 권장한다.",
+    "tags": ["cypress", "e2e", "flaky-test", "wait", "intercept", "async"]
+  },
+  {
+    "id": "cypress_bp_004",
+    "title": "UI 로그인 반복 금지 - 프로그래매틱 로그인으로 테스트 속도 향상",
+    "source_name": "Cypress Best Practices",
+    "source_url": "https://docs.cypress.io/app/core-concepts/best-practices",
+    "category": "test_technique",
+    "technique": "프로그래매틱 인증(Programmatic Login)",
+    "apply_when": [
+      "로그인이 필요한 기능을 여러 테스트에서 반복적으로 검증하는 경우",
+      "매 테스트마다 로그인 폼을 UI로 직접 조작하는 경우"
+    ],
+    "qa_perspective": [
+      "로그인 UI를 매번 조작하는 테스트 흐름이 전체 테스트 시간을 불필요하게 늘리는지 확인",
+      "cy.request()로 로그인 API를 직접 호출하여 인증 토큰·쿠키를 설정하는 방식이 적용되는지 확인",
+      "cy.session()으로 로그인 상태를 캐싱하여 반복 인증을 제거하는지 확인"
+    ],
+    "risk_type": "SLOW_TEST",
+    "tdd_hint": "beforeEach에서 cy.request('POST', '/api/login', { email, password })를 호출하여 쿠키·토큰을 설정하고, 이후 테스트 본문에서는 로그인 이후 화면부터 시작하도록 작성한다.",
+    "example_scenario": "학생 팀 프로젝트에서 마이페이지, 게시글 작성, 댓글 작성 등 로그인이 필요한 10개 테스트가 각각 로그인 UI를 반복하면 전체 실행시간이 크게 늘어난다. beforeEach에서 cy.request로 로그인 API를 호출하여 세션을 설정하면 UI 클릭 없이 인증 상태를 확보할 수 있다.",
+    "evidence": "Cypress 공식 문서: 'Using your UI to log in'을 피하고, 프로그래매틱 방식(cy.request, cy.session)으로 로그인 처리하도록 권장한다.",
+    "tags": ["cypress", "e2e", "login", "programmatic", "cy.request", "cy.session", "performance"]
+  },
+  {
+    "id": "cypress_bp_005",
+    "title": "테스트 사전 초기화 원칙 - afterEach 대신 beforeEach에서 상태 정리",
+    "source_name": "Cypress Best Practices",
+    "source_url": "https://docs.cypress.io/app/core-concepts/best-practices",
+    "category": "qa_concept",
+    "technique": "테스트 픽스처 관리(Test Fixture Management)",
+    "apply_when": [
+      "DB 초기화, 로그아웃, 쿠키 삭제 등 상태 정리가 필요한 테스트 스위트를 작성하는 경우",
+      "afterEach()나 after() 훅에서 정리 작업을 수행하는 경우"
+    ],
+    "qa_perspective": [
+      "테스트가 중간에 실패하면 afterEach 정리 코드가 실행되지 않아 이후 테스트가 오염된 상태에서 시작하는지 확인",
+      "beforeEach에서 상태를 초기화하면 이전 테스트 실패 여부와 무관하게 항상 깨끗한 상태가 보장되는지 확인"
+    ],
+    "risk_type": "TEST_STATE_POLLUTION",
+    "tdd_hint": "afterEach(() => cleanup())를 beforeEach(() => cleanup())로 이동하여 각 테스트 시작 전 항상 초기 상태를 보장하도록 설계한다.",
+    "example_scenario": "학생 팀 프로젝트에서 afterEach에 cy.request('/api/db/reset')을 두면, 세 번째 테스트가 실패했을 때 네 번째 테스트는 리셋되지 않은 더러운 DB 상태에서 시작한다. 이를 beforeEach로 옮기면 항상 리셋된 상태에서 테스트가 시작된다.",
+    "evidence": "Cypress 공식 문서: 'Using after or afterEach hooks to clean up state'를 피하고, 상태 정리는 테스트 시작 전(beforeEach)에 수행하도록 권장한다.",
+    "tags": ["cypress", "e2e", "beforeEach", "afterEach", "test-isolation", "db-reset"]
+  },
+  {
+    "id": "cypress_bp_006",
+    "title": "cy.get() 반환값을 변수에 직접 할당하지 않는다 - 별칭(alias) 사용",
+    "source_name": "Cypress Best Practices",
+    "source_url": "https://docs.cypress.io/app/core-concepts/best-practices",
+    "category": "test_technique",
+    "technique": "Cypress 비동기 체인 패턴 / 별칭(Alias)",
+    "apply_when": [
+      "Cypress 명령어의 반환값을 const, let, var로 저장하려 하는 경우",
+      "여러 곳에서 동일 요소를 재사용해야 하는 경우"
+    ],
+    "qa_perspective": [
+      "const el = cy.get('a')처럼 할당한 변수를 나중에 사용하면 Cypress 비동기 특성으로 인해 undefined가 될 수 있는지 확인",
+      ".as('별칭')과 cy.get('@별칭') 패턴을 사용하여 비동기 체인 내에서 안전하게 요소를 재사용하는지 확인"
+    ],
+    "risk_type": "ASYNC_MISUSE",
+    "tdd_hint": "요소를 재사용해야 할 때 cy.get('a').as('links')로 별칭을 선언하고, 이후 cy.get('@links').first().click()처럼 참조하도록 테스트를 작성한다.",
+    "example_scenario": "학생 팀 프로젝트에서 const btn = cy.get('[data-cy=\"submit\"]')로 버튼을 저장한 뒤 btn.click()을 호출하면 작동하지 않는다. 대신 cy.get('[data-cy=\"submit\"]').as('submitBtn')으로 선언하고 cy.get('@submitBtn').click()으로 참조해야 한다.",
+    "evidence": "Cypress 공식 문서: 'Trying to assign the return value of Commands with const, let, or var'를 피하고, alias와 closure를 사용하도록 명시한다.",
+    "tags": ["cypress", "e2e", "alias", "async", "chain", "anti-pattern"]
+  },
+  {
+    "id": "cypress_bp_007",
+    "title": "E2E 테스트는 단위 테스트처럼 쪼개지 않는다 - 의미 있는 흐름 단위로 통합",
+    "source_name": "Cypress Best Practices",
+    "source_url": "https://docs.cypress.io/app/core-concepts/best-practices",
+    "category": "qa_concept",
+    "technique": "E2E 테스트 설계 원칙",
+    "apply_when": [
+      "하나의 기능 흐름을 어설션 하나짜리 작은 it() 블록 여러 개로 나눈 경우",
+      "E2E 테스트를 단위 테스트처럼 매우 세분화하여 작성한 경우"
+    ],
+    "qa_perspective": [
+      "어설션이 하나뿐인 여러 it() 블록이 사실상 하나의 사용자 흐름을 검증하는지 확인",
+      "관련된 여러 어설션을 하나의 it() 안에서 체이닝하여 실행 비용(방문, 초기화 등)을 줄이는지 확인"
+    ],
+    "risk_type": "OVER_FRAGMENTED_TEST",
+    "tdd_hint": "하나의 사용자 시나리오(예: '유효한 폼을 제출하면 성공 메시지가 표시된다')를 기준으로 it()을 작성하고, 관련 어설션을 .should().and() 체인으로 모두 포함한다.",
+    "example_scenario": "학생 팀 프로젝트에서 '이름 필드에 required 속성이 있다', '이름 필드에 active 클래스가 있다', '이름이 capitalize된다'를 각각 it()으로 분리하는 대신, it('이름 필드 입력 시 유효성과 포맷이 적용된다')로 합치고 내부에서 세 가지를 체이닝하여 확인한다.",
+    "evidence": "Cypress 공식 문서: 'Acting like you're writing unit tests'를 피하고, 다중 어설션을 포함한 통합적 E2E 테스트를 권장한다.",
+    "tags": ["cypress", "e2e", "test-design", "assertion", "test-granularity"]
+  },
+  {
+    "id": "cypress_bp_008",
+    "title": "baseUrl 전역 설정으로 테스트 URL 관리 일원화",
+    "source_name": "Cypress Best Practices",
+    "source_url": "https://docs.cypress.io/app/core-concepts/best-practices",
+    "category": "test_technique",
+    "technique": "Cypress 환경 설정",
+    "apply_when": [
+      "여러 테스트 파일에서 cy.visit('http://localhost:3000/...')을 반복하는 경우",
+      "개발/스테이징/프로덕션 등 환경별로 baseUrl이 다른 경우"
+    ],
+    "qa_perspective": [
+      "cy.visit()마다 전체 도메인을 하드코딩하면 환경 전환 시 모든 파일을 수정해야 하는지 확인",
+      "cypress.config.js의 baseUrl 설정을 통해 cy.visit('/login')만으로 올바른 URL에 접근하는지 확인",
+      "baseUrl이 설정되면 서버 실행 여부를 Cypress가 자동으로 확인하는지 확인"
+    ],
+    "risk_type": "MAINTAINABILITY",
+    "tdd_hint": "cypress.config.js에 e2e.baseUrl을 먼저 설정하고, 테스트에서는 cy.visit('/path')처럼 경로만 작성하여 환경 의존성을 설정 파일에 집중시킨다.",
+    "example_scenario": "학생 팀 프로젝트에서 10개 테스트 파일에 cy.visit('http://localhost:3000')이 반복되면, 포트 변경 시 모두 수정해야 한다. cypress.config.js에 baseUrl: 'http://localhost:3000'을 설정하면 테스트에서는 cy.visit('/')만 사용하고 포트 변경은 설정 파일 한 곳만 수정하면 된다.",
+    "evidence": "Cypress 공식 문서: 'Using cy.visit() without setting a baseUrl'를 피하고, cypress.config.js에 전역 baseUrl을 지정하도록 권장한다.",
+    "tags": ["cypress", "e2e", "configuration", "baseUrl", "maintainability", "environment"]
+  },
+  {
+    "id": "cypress_bp_009",
+    "title": "제어할 수 없는 외부 사이트 테스트 금지 - cy.origin 또는 API 우회 사용",
+    "source_name": "Cypress Best Practices",
+    "source_url": "https://docs.cypress.io/app/core-concepts/best-practices",
+    "category": "qa_concept",
+    "technique": "외부 의존성 테스트 전략",
+    "apply_when": [
+      "Google, GitHub, Kakao 등 소셜 로그인을 E2E 테스트에서 직접 조작하려는 경우",
+      "제3자 서비스 UI에 의존하는 인증 흐름을 테스트하는 경우"
+    ],
+    "qa_perspective": [
+      "외부 소셜 로그인 사이트를 직접 조작하면 CAPTCHA, 자동화 감지, A/B 테스트 등으로 간헐적으로 실패하는지 확인",
+      "소셜 로그인 흐름은 cy.request()로 토큰을 직접 요청하거나, 백엔드에서 세션을 직접 생성하는 방식으로 우회하는지 확인",
+      "테스트가 통제 불가능한 외부 환경 변화에 의해 깨지는 flaky 테스트가 되지 않는지 확인"
+    ],
+    "risk_type": "EXTERNAL_DEPENDENCY",
+    "tdd_hint": "소셜 로그인 테스트는 실제 제공자 UI 조작 대신 cy.request()로 백엔드 로그인 API를 직접 호출하거나, 테스트 환경용 더미 OAuth 엔드포인트를 사용하도록 설계한다.",
+    "example_scenario": "학생 팀 프로젝트에서 Google OAuth 로그인을 Cypress로 자동화하면 Google이 봇으로 탐지하여 CAPTCHA를 띄울 수 있다. 대신 cy.request('POST', '/api/auth/google/callback', { token: 'test-token' })으로 콜백 엔드포인트를 직접 호출하여 세션을 생성하는 방식으로 대체한다.",
+    "evidence": "Cypress 공식 문서: 'Trying to visit or interact with sites or servers you do not control'를 피하고, 외부 인증 제공자는 cy.origin(), cy.request(), cy.session() 조합으로 처리하도록 권장한다.",
+    "tags": ["cypress", "e2e", "oauth", "external-dependency", "flaky-test", "social-login"]
+  },
+  {
+    "id": "cypress_bp_010",
+    "title": "테스트 파일에 민감 정보 하드코딩 금지 - cy.env()로 환경변수 분리",
+    "source_name": "Cypress Best Practices",
+    "source_url": "https://docs.cypress.io/app/core-concepts/best-practices",
+    "category": "security",
+    "technique": "테스트 환경변수 관리",
+    "apply_when": [
+      "테스트 코드에 API 키, 비밀번호, 토큰 등을 문자열로 직접 작성하는 경우",
+      "테스트 파일을 Git에 커밋하는 경우"
+    ],
+    "qa_perspective": [
+      "테스트 파일에 하드코딩된 비밀번호나 API 키가 Git 히스토리에 노출되지 않는지 확인",
+      "민감한 값은 cypress.env.json 또는 CI 환경변수로 분리하고 .gitignore에 등록하는지 확인",
+      "cy.env('apiKey')를 통해 테스트 코드에서 환경변수를 참조하는지 확인"
+    ],
+    "risk_type": "CREDENTIAL_EXPOSURE",
+    "tdd_hint": "테스트에서 cy.env('testUserPassword')로 비밀번호를 참조하고, 실제 값은 cypress.env.json(gitignore 등록) 또는 CI 시크릿 변수로 관리하는 구조를 먼저 설계한다.",
+    "example_scenario": "학생 팀 프로젝트에서 cy.get('[data-cy=\"password\"]').type('secret123')처럼 실제 비밀번호를 테스트 코드에 작성하면 GitHub 공개 저장소에 노출된다. cypress.env.json에 { \"testPassword\": \"secret123\" }을 저장하고 .gitignore에 추가한 뒤, 테스트에서는 cy.env('testPassword')로 참조한다.",
+    "evidence": "Cypress 공식 문서: 'Hardcoding secrets in test files'를 피하고, cy.env()와 환경변수를 통해 민감한 값을 분리하도록 명시한다.",
+    "tags": ["cypress", "e2e", "security", "env", "credential", "gitignore", "ci"]
+  },
+  {
+    "id": "cypress_bp_011",
+    "title": "cy.intercept()로 API 요청을 인터셉트하여 네트워크 동작 검증",
+    "source_name": "Cypress Best Practices",
+    "source_url": "https://docs.cypress.io/app/core-concepts/best-practices",
+    "category": "test_technique",
+    "technique": "네트워크 인터셉트(Network Intercepting)",
+    "apply_when": [
+      "버튼 클릭 후 특정 API 요청이 발생하는지 확인해야 하는 경우",
+      "API 응답을 임의로 제어하여 에러·빈 데이터 등 다양한 케이스를 테스트하는 경우"
+    ],
+    "qa_perspective": [
+      "cy.intercept()로 요청을 가로채 응답 데이터를 목(mock)으로 대체할 수 있는지 확인",
+      "cy.wait('@별칭')으로 특정 API 요청이 실제로 발생했는지 어설션하는지 확인",
+      "서버 오류(500), 빈 응답, 네트워크 지연 등 에러 케이스를 인터셉트로 시뮬레이션하는지 확인"
+    ],
+    "risk_type": "ASYNC_RACE_CONDITION",
+    "tdd_hint": "cy.intercept('GET', '/api/users', { fixture: 'users.json' }).as('getUsers')를 먼저 작성하고, 이후 액션과 cy.wait('@getUsers'), 결과 어설션을 순서대로 작성한다.",
+    "example_scenario": "학생 팀 프로젝트에서 게시글 목록 API가 빈 배열을 반환할 때 '게시글이 없습니다' 메시지가 표시되는지 테스트하려면, cy.intercept('GET', '/api/posts', []).as('getPosts')로 빈 응답을 강제한 뒤 UI에서 해당 메시지를 어설션한다.",
+    "evidence": "Cypress 공식 문서: cy.wait()의 숫자 대기 대신 경로 별칭(route alias)을 사용하여 실제 네트워크 응답 시점에 맞춰 대기하도록 권장한다.",
+    "tags": ["cypress", "e2e", "intercept", "mock", "async", "network", "stub"]
+  },
+  {
+    "id": "cypress_bp_012",
+    "title": "Cypress는 웹 서버를 직접 시작하지 않는다 - 테스트 실행 전 서버를 별도 기동",
+    "source_name": "Cypress Best Practices",
+    "source_url": "https://docs.cypress.io/app/core-concepts/best-practices",
+    "category": "test_technique",
+    "technique": "E2E 테스트 환경 구성",
+    "apply_when": [
+      "Cypress 테스트 스크립트 내부에서 cy.exec()이나 cy.task()로 서버를 시작하려는 경우",
+      "CI/CD 파이프라인에서 E2E 테스트를 자동화하는 경우"
+    ],
+    "qa_perspective": [
+      "Cypress 스크립트 내에서 서버를 시작하면 프로세스 백그라운드 처리 복잡성이 높아지는지 확인",
+      "npm run start:server와 npm run cypress:run을 별도 명령으로 순차 실행하는 방식이 적용되는지 확인",
+      "baseUrl 설정 시 Cypress가 자동으로 서버 응답 여부를 확인하므로 서버 기동 여부를 별도로 감지할 필요가 없는지 확인"
+    ],
+    "risk_type": "CI_FLAKINESS",
+    "tdd_hint": "package.json의 scripts에 \"test:e2e\": \"start-server-and-test start http://localhost:3000 cypress:run\" 형태로 서버 기동과 테스트 실행을 연결하는 스크립트를 먼저 구성한다.",
+    "example_scenario": "학생 팀 프로젝트의 CI 설정에서 npm start를 백그라운드로 실행한 뒤 npx cypress run을 실행하도록 설정한다. start-server-and-test 패키지를 사용하면 서버가 준비될 때까지 자동으로 대기 후 Cypress를 실행한다.",
+    "evidence": "Cypress 공식 문서: 'Trying to start a web server from within Cypress scripts'를 피하고, Cypress 실행 전에 외부에서 웹 서버를 시작하도록 권장한다.",
+    "tags": ["cypress", "e2e", "ci", "server", "configuration", "automation"]
+  }
+]
