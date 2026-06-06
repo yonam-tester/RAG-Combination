@@ -1,0 +1,50 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: yeonam-tester-backend
+  datasource:
+    url: jdbc:h2:file:./data/yeonam_db;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.H2Dialect
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: true
+
+aws:
+  s3:
+    endpoint: http://localhost:9000
+    access-key: minioadmin
+    secret-key: minioadmin
+    region: us-east-1
+    buckets:
+      documents: yeonam-documents
+      reports: yeonam-reports
+  region: ${AWS_REGION:us-east-1}
+  bedrock:
+    model-id: ${AWS_BEDROCK_MODEL_ID:anthropic.claude-3-haiku-20240307-v1:0}
+
+ai:
+  server:
+    url: ${AI_SERVER_URL:http://localhost:8000}
+
+llm:
+  provider: ${LLM_PROVIDER:mock}
+  direct: ${LLM_DIRECT:false}

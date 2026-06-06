@@ -1,19 +1,50 @@
-# Python local ignores
+# System / IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+__MACOSX/
+
+# Dependencies
+node_modules/
+jspm_packages/
+web_modules/
+
+# Python caching & Virtual Environments
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+env/
 venv/
-.env
+pip-log.txt
+pip-delete-this-directory.txt
+.venv/
+.poetry/
+.ipynb_checkpoints/
+
+# Maven / Java Build
+target/
+*.class
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Databases & Object Storages
+data/
+yeonam_db*
+minio
+minio_data/
 temp/
 
-# Remote templates
-.vscode/
-.alcache/
-.alpackages/
-.snapshots/
-.output/
-*.app
-rad.json
-*.g.xlf
-*.bclicense
-*.flf
-TestResults.xml
+# Environment configurations (Secrets)
+.env
+*.env
+*.local

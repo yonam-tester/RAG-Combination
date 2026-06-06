@@ -1,0 +1,400 @@
+[
+  {
+    "id": "owasp_auth_001",
+    "title": "자격증명 암호화 전송 미흡 검증",
+    "source_name": "OWASP Web Security Testing Guide v4.2 - WSTG-ATHN-01",
+    "source_url": "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/04-Authentication_Testing/01-Testing_for_Credentials_Transported_over_an_Encrypted_Channel",
+    "category": "security",
+    "technique": "Authentication Testing",
+    "apply_when": [
+      "로그인 폼이 있는 경우",
+      "회원가입 또는 비밀번호 변경 기능이 있는 경우",
+      "세션 토큰을 발급하는 API가 있는 경우"
+    ],
+    "qa_perspective": [
+      "로그인 요청이 HTTPS로 전송되는지 확인",
+      "HTTP로 강제 접근 시 HTTPS로 리다이렉트 되는지 확인",
+      "응답 쿠키에 Secure 속성이 설정되어 있는지 확인",
+      "비밀번호 재설정 링크 전송 시에도 HTTPS가 사용되는지 확인",
+      "로그인 이후 인증된 요청에서 세션 토큰이 HTTP로 유출되지 않는지 확인"
+    ],
+    "risk_type": "CREDENTIAL_EXPOSURE",
+    "tdd_hint": "HTTP 엔드포인트로 로그인 요청 시 301/302 리다이렉트 또는 접근 거부를 반환하는 테스트를 먼저 작성한다.",
+    "example_scenario": "학생 팀 프로젝트의 로그인 API가 HTTP 요청을 허용하는지 확인한다. 브라우저 개발자도구 네트워크 탭에서 요청 프로토콜을 점검하고, Set-Cookie 헤더에 Secure 속성이 포함되어 있는지 검사한다.",
+    "evidence": "WSTG-ATHN-01 원문: 로그인, 세션 토큰 응답, 비밀번호 재설정 토큰 전송 등 자격증명 관련 모든 상호작용이 HTTPS로 보호되어야 하며, 그렇지 않으면 네트워크 스니핑을 통한 자격증명 탈취가 가능하다.",
+    "tags": ["security", "auth", "https", "tls", "credential", "negative-test"]
+  },
+  {
+    "id": "owasp_auth_002",
+    "title": "계정 잠금 메커니즘 미흡 검증",
+    "source_name": "OWASP Web Security Testing Guide v4.2 - WSTG-ATHN-03",
+    "source_url": "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/04-Authentication_Testing/03-Testing_for_Weak_Lock_Out_Mechanism",
+    "category": "security",
+    "technique": "Authentication Testing",
+    "apply_when": [
+      "로그인 기능이 있는 경우",
+      "API 인증 엔드포인트가 있는 경우"
+    ],
+    "qa_perspective": [
+      "잘못된 비밀번호를 연속으로 입력했을 때 일정 횟수 이후 계정이 잠기는지 확인",
+      "계정 잠금 후 올바른 비밀번호를 입력해도 로그인이 거부되는지 확인",
+      "잠금 임계값이 너무 낮아(1~2회) 정상 사용자가 과도하게 차단되지 않는지 확인",
+      "CAPTCHA 또는 지연 응답 등 브루트포스 방어 수단이 동작하는지 확인",
+      "계정 잠금 해제 방식(시간 기반, 이메일 링크 등)이 안전하게 구현되었는지 확인"
+    ],
+    "risk_type": "BRUTE_FORCE",
+    "tdd_hint": "동일 계정에 잘못된 비밀번호를 5회 이상 연속 입력 시 그 이후 요청이 429 또는 401과 함께 잠금 메시지를 반환하는 실패 테스트를 먼저 작성한다.",
+    "example_scenario": "학생 팀 프로젝트의 로그인 API에 잘못된 비밀번호를 5회 연속 전송하는 테스트를 작성한다. 5회 실패 후 올바른 비밀번호로 요청해도 거부되는지, 그리고 적절한 오류 메시지(계정 잠금 안내)가 반환되는지 확인한다.",
+    "evidence": "WSTG-ATHN-03 원문: 계정 잠금 메커니즘은 브루트포스 공격을 완화하기 위해 사용되며, 임계값 설정과 해제 방식 모두가 충분히 안전해야 한다.",
+    "tags": ["security", "auth", "brute-force", "lockout", "negative-test", "api"]
+  },
+  {
+    "id": "owasp_auth_003",
+    "title": "비밀번호 재설정 기능 취약점 검증",
+    "source_name": "OWASP Web Security Testing Guide v4.2 - WSTG-ATHN-09",
+    "source_url": "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/04-Authentication_Testing/09-Testing_for_Weak_Password_Change_or_Reset_Functionalities",
+    "category": "security",
+    "technique": "Authentication Testing",
+    "apply_when": [
+      "비밀번호 찾기 또는 재설정 기능이 있는 경우",
+      "이메일 기반 인증 링크를 발급하는 경우"
+    ],
+    "qa_perspective": [
+      "재설정 링크가 일회성인지 확인 (동일 링크를 두 번 사용했을 때 거부되는지)",
+      "재설정 링크에 만료 시간이 설정되어 있는지 확인",
+      "비밀번호가 이메일 본문에 평문으로 노출되지 않는지 확인",
+      "재설정 토큰이 충분히 복잡하고 예측 불가능한지 확인",
+      "비밀번호 변경 후 이전 세션이 강제 종료되는지 확인"
+    ],
+    "risk_type": "ACCOUNT_TAKEOVER",
+    "tdd_hint": "비밀번호 재설정 링크 사용 후 동일 링크로 재요청 시 400 또는 410을 반환하는 실패 테스트를 먼저 작성한다.",
+    "example_scenario": "학생 팀 프로젝트의 비밀번호 재설정 기능에서 발급된 토큰을 한 번 사용한 뒤 동일 토큰으로 다시 재설정을 시도한다. 두 번째 요청이 거부되는지 확인하고, 토큰이 URL에 평문으로 노출되는 길이나 구조가 예측 가능하지는 않은지 점검한다.",
+    "evidence": "WSTG-ATHN-09 원문: 비밀번호 재설정은 민감한 기능이므로 토큰의 무작위성, 일회성, 만료 시간, 재인증 절차가 모두 갖춰져야 계정 탈취를 방지할 수 있다.",
+    "tags": ["security", "auth", "password-reset", "token", "account-takeover"]
+  },
+  {
+    "id": "owasp_authz_001",
+    "title": "수평적·수직적 인가 우회 검증",
+    "source_name": "OWASP Web Security Testing Guide v4.2 - WSTG-AUTHZ-02",
+    "source_url": "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/05-Authorization_Testing/02-Testing_for_Bypassing_Authorization_Schema",
+    "category": "security",
+    "technique": "Authorization Testing",
+    "apply_when": [
+      "사용자 역할(role)이 구분되어 있는 경우 (일반 사용자 / 관리자 등)",
+      "사용자별 접근 가능한 리소스가 다른 경우",
+      "API 엔드포인트에 역할 기반 접근 제어가 적용된 경우"
+    ],
+    "qa_perspective": [
+      "일반 사용자 토큰으로 관리자 전용 API 엔드포인트에 요청 시 403이 반환되는지 확인",
+      "로그아웃 후 이전에 사용하던 API 요청을 재전송했을 때 접근이 거부되는지 확인",
+      "다른 사용자의 리소스 ID를 직접 변경하여 요청했을 때 자신의 데이터만 조회되는지 확인",
+      "X-Original-URL, X-Forwarded-For 등 특수 헤더를 추가했을 때 인가 우회가 발생하지 않는지 확인"
+    ],
+    "risk_type": "AUTHORIZATION_BYPASS",
+    "tdd_hint": "일반 사용자 세션으로 관리자 전용 엔드포인트 호출 시 403 Forbidden을 반환하는 실패 테스트를 먼저 작성한다.",
+    "example_scenario": "학생 팀 프로젝트에서 사용자 A의 토큰으로 사용자 B만 접근 가능한 자원(예: /api/users/B/profile)에 GET 요청을 보내 403이 반환되는지 확인한다. 또한 일반 사용자 토큰으로 /admin/ 계열 엔드포인트를 호출하여 권한 오류가 발생하는지 검증한다.",
+    "evidence": "WSTG-AUTHZ-02 원문: 인가 스키마는 수평적(동일 권한 사용자 간) 및 수직적(권한 계층 간) 접근 우회 모두를 방어해야 하며, 최소 권한 원칙을 모든 리소스에 적용해야 한다.",
+    "tags": ["security", "authz", "role", "access-control", "403", "negative-test"]
+  },
+  {
+    "id": "owasp_authz_002",
+    "title": "권한 상승(Privilege Escalation) 검증",
+    "source_name": "OWASP Web Security Testing Guide v4.2 - WSTG-AUTHZ-03",
+    "source_url": "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/05-Authorization_Testing/03-Testing_for_Privilege_Escalation",
+    "category": "security",
+    "technique": "Authorization Testing",
+    "apply_when": [
+      "사용자 역할 또는 그룹 정보가 요청 파라미터나 바디에 포함되는 경우",
+      "사용자 프로필에 역할 정보가 저장되는 경우"
+    ],
+    "qa_perspective": [
+      "요청 바디나 파라미터의 role, groupID 등 권한 관련 필드를 임의 변경했을 때 서버가 이를 무시하는지 확인",
+      "숨겨진 폼 필드나 쿠키 값으로 역할을 변경했을 때 서버에서 재검증이 이루어지는지 확인",
+      "IP 주소 위조(X-Forwarded-For 헤더 변경) 후 특정 기능 접근 시 거부되는지 확인",
+      "일반 사용자가 관리자 기능(사용자 삭제, 권한 변경 등)을 호출할 수 없는지 확인"
+    ],
+    "risk_type": "PRIVILEGE_ESCALATION",
+    "tdd_hint": "클라이언트에서 role=admin 파라미터를 전송했을 때 서버가 이를 무시하고 서버 측 역할만 신뢰하는지 검증하는 테스트를 먼저 작성한다.",
+    "example_scenario": "학생 팀 프로젝트의 회원 수정 API 요청 바디에 'role': 'admin' 필드를 추가하여 전송한다. 서버가 해당 값을 무시하고 권한 변경이 이루어지지 않는지 확인한다.",
+    "evidence": "WSTG-AUTHZ-03 원문: 권한 상승 테스트는 사용자가 파라미터, 숨겨진 필드, 헤더 조작 등을 통해 역할이나 권한을 변경할 수 없음을 확인해야 한다. 수직·수평 상승 모두 검토 대상이다.",
+    "tags": ["security", "authz", "privilege-escalation", "role", "parameter-tampering"]
+  },
+  {
+    "id": "owasp_authz_003",
+    "title": "IDOR(안전하지 않은 직접 객체 참조) 검증",
+    "source_name": "OWASP Web Security Testing Guide v4.2 - WSTG-AUTHZ-04",
+    "source_url": "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/05-Authorization_Testing/04-Testing_for_Insecure_Direct_Object_References",
+    "category": "security",
+    "technique": "Authorization Testing",
+    "apply_when": [
+      "URL 또는 요청 파라미터에 리소스 ID(숫자, UUID 등)가 포함되는 경우",
+      "사용자별 데이터를 조회·수정·삭제하는 API가 있는 경우"
+    ],
+    "qa_perspective": [
+      "자신의 리소스 ID를 다른 사용자 ID로 변경했을 때 403 또는 404가 반환되는지 확인",
+      "다른 사용자의 주문, 파일, 메시지 등에 직접 ID 접근 시 데이터가 노출되지 않는지 확인",
+      "삭제나 수정 요청에서도 소유권 검증이 이루어지는지 확인",
+      "ID가 순차적(1, 2, 3...)일 경우 인접 ID에 접근해도 거부되는지 확인"
+    ],
+    "risk_type": "IDOR",
+    "tdd_hint": "사용자 A의 인증 토큰으로 사용자 B 소유의 리소스 ID를 포함한 GET/PUT/DELETE 요청 시 403이 반환되는 테스트를 먼저 작성한다.",
+    "example_scenario": "학생 팀 프로젝트에서 /api/orders/1001 (다른 사용자 주문)에 자신의 토큰으로 GET 요청을 보낸다. 응답이 해당 주문 데이터가 아닌 403 Forbidden인지 검증한다. 수정(PUT), 삭제(DELETE) 시에도 동일하게 검증한다.",
+    "evidence": "WSTG-AUTHZ-04 원문: IDOR 취약점은 공격자가 다른 사용자의 데이터베이스 레코드, 파일, 기능에 무단 접근하도록 허용한다. 모든 객체 접근 시 서버 측에서 소유권 및 인가를 반드시 검증해야 한다.",
+    "tags": ["security", "authz", "idor", "object-reference", "api", "negative-test"]
+  },
+  {
+    "id": "owasp_sess_001",
+    "title": "쿠키 보안 속성 설정 검증",
+    "source_name": "OWASP Web Security Testing Guide v4.2 - WSTG-SESS-02",
+    "source_url": "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/06-Session_Management_Testing/02-Testing_for_Cookies_Attributes",
+    "category": "security",
+    "technique": "Session Management Testing",
+    "apply_when": [
+      "세션 또는 인증 정보를 쿠키로 관리하는 경우",
+      "로그인 후 세션 쿠키를 발급하는 경우"
+    ],
+    "qa_perspective": [
+      "응답 헤더의 Set-Cookie에 Secure 속성이 포함되어 있는지 확인 (HTTPS 전용 전송 보장)",
+      "Set-Cookie에 HttpOnly 속성이 포함되어 있는지 확인 (JavaScript 접근 차단)",
+      "SameSite 속성이 Strict 또는 Lax로 설정되어 있는지 확인 (CSRF 방어)",
+      "Domain 속성이 필요 이상으로 넓게 설정되지 않았는지 확인",
+      "세션 쿠키의 만료 시간이 적절히 짧게 설정되어 있는지 확인"
+    ],
+    "risk_type": "SESSION_HIJACKING",
+    "tdd_hint": "로그인 응답의 Set-Cookie 헤더를 파싱하여 Secure, HttpOnly, SameSite 속성이 모두 존재하는지 검증하는 단위 테스트를 먼저 작성한다.",
+    "example_scenario": "학생 팀 프로젝트의 로그인 API 응답 헤더를 확인한다. Set-Cookie: session=abc123; Path=/; Secure; HttpOnly; SameSite=Strict 형태로 설정되어 있는지 검사하고, 하나라도 누락된 속성이 있으면 실패로 처리한다.",
+    "evidence": "WSTG-SESS-02 원문: Secure 속성 없이 HTTP를 통해 쿠키가 전송되거나, HttpOnly가 없어 XSS로 세션 탈취가 가능하거나, SameSite 미설정으로 CSRF에 노출되는 경우 세션 하이재킹 위험이 존재한다. 권장 설정: __Host-SID=<token>; path=/; Secure; HttpOnly; SameSite=Strict",
+    "tags": ["security", "session", "cookie", "httponly", "secure", "samesite", "xss"]
+  },
+  {
+    "id": "owasp_sess_002",
+    "title": "CSRF(크로스 사이트 요청 위조) 방어 검증",
+    "source_name": "OWASP Web Security Testing Guide v4.2 - WSTG-SESS-05",
+    "source_url": "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/06-Session_Management_Testing/05-Testing_for_Cross_Site_Request_Forgery",
+    "category": "security",
+    "technique": "Session Management Testing",
+    "apply_when": [
+      "상태를 변경하는 POST/PUT/DELETE API가 있는 경우",
+      "쿠키 기반 세션 인증을 사용하는 경우",
+      "폼 기반 데이터 제출 기능이 있는 경우"
+    ],
+    "qa_perspective": [
+      "상태 변경 요청(POST/PUT/DELETE)에 CSRF 토큰이 요구되는지 확인",
+      "CSRF 토큰 없이 요청 시 서버가 이를 거부(403)하는지 확인",
+      "토큰 없이 외부 출처에서 요청이 전송되었을 때 거부되는지 확인",
+      "SameSite 쿠키 속성만으로 CSRF 방어에 의존하지 않는지 확인 (구형 브라우저 대비)"
+    ],
+    "risk_type": "CSRF",
+    "tdd_hint": "CSRF 토큰 헤더 없이 상태 변경 API(POST /api/settings 등)를 호출했을 때 403이 반환되는 실패 테스트를 먼저 작성한다.",
+    "example_scenario": "학생 팀 프로젝트의 게시글 작성 API(POST /api/posts)를 CSRF 토큰 없이 호출한다. 인증 쿠키가 유효하더라도 요청이 거부(403)되는지 확인한다. 또한 Origin 또는 Referer 헤더가 다른 도메인으로 위조된 요청도 거부되는지 검증한다.",
+    "evidence": "WSTG-SESS-05 원문: CSRF 공격은 인증된 사용자의 브라우저를 통해 의도하지 않은 요청을 실행시키며, 자금 이체·설정 변경·메시지 전송 등 상태 변경 작업에 영향을 준다. POST 방식만으로는 방어 불충분하며 서버 측 토큰 검증이 필수다.",
+    "tags": ["security", "session", "csrf", "post", "api", "negative-test"]
+  },
+  {
+    "id": "owasp_sess_003",
+    "title": "로그아웃 후 세션 무효화 검증",
+    "source_name": "OWASP Web Security Testing Guide v4.2 - WSTG-SESS-06",
+    "source_url": "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/06-Session_Management_Testing/06-Testing_for_Logout_Functionality",
+    "category": "security",
+    "technique": "Session Management Testing",
+    "apply_when": [
+      "로그인/로그아웃 기능이 있는 경우",
+      "세션 토큰 또는 JWT를 발급하는 경우"
+    ],
+    "qa_perspective": [
+      "로그아웃 후 이전에 발급된 세션 토큰으로 API 요청 시 401이 반환되는지 확인",
+      "로그아웃 요청이 서버 측에서 세션을 실제로 무효화하는지 확인 (클라이언트 쿠키 삭제만으로 처리하지 않는지)",
+      "일정 시간 비활동 후 세션이 자동 만료되는지 확인",
+      "로그아웃 후 브라우저 뒤로가기로 인증 페이지에 접근되지 않는지 확인"
+    ],
+    "risk_type": "SESSION_PERSISTENCE",
+    "tdd_hint": "로그아웃 호출 후 이전 세션 토큰으로 인증된 엔드포인트를 요청했을 때 401을 반환하는 테스트를 먼저 작성한다.",
+    "example_scenario": "학생 팀 프로젝트에서 로그인 후 세션 토큰을 저장해둔다. POST /api/logout을 호출한 뒤, 저장해둔 토큰으로 /api/me 엔드포인트를 요청한다. 로그아웃 후 해당 토큰이 무효화되어 401이 반환되어야 한다.",
+    "evidence": "WSTG-SESS-06 원문: 클라이언트 측 쿠키만 삭제하고 서버 측 세션 상태를 유지하면 토큰 재사용 공격이 가능하다. 서버 측에서 세션을 실제로 종료(kill)해야 완전한 로그아웃이 보장된다.",
+    "tags": ["security", "session", "logout", "token", "invalidation", "negative-test"]
+  },
+  {
+    "id": "owasp_sess_004",
+    "title": "세션 고정(Session Fixation) 취약점 검증",
+    "source_name": "OWASP Web Security Testing Guide v4.2 - WSTG-SESS-03",
+    "source_url": "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/06-Session_Management_Testing/03-Testing_for_Session_Fixation",
+    "category": "security",
+    "technique": "Session Management Testing",
+    "apply_when": [
+      "로그인 전후에 동일한 세션 ID를 사용하는 경우",
+      "세션 ID가 URL 파라미터로 전달되는 경우"
+    ],
+    "qa_perspective": [
+      "로그인 전 발급된 세션 ID가 로그인 성공 후 새로운 값으로 교체되는지 확인",
+      "로그인 성공 응답에서 새 세션 토큰이 발급되는지 확인",
+      "URL 파라미터로 세션 ID를 수용하지 않는지 확인"
+    ],
+    "risk_type": "SESSION_FIXATION",
+    "tdd_hint": "로그인 전 세션 토큰과 로그인 후 세션 토큰이 다른 값인지 비교하는 테스트를 먼저 작성한다.",
+    "example_scenario": "학생 팀 프로젝트에서 로그인 전 발급된 세션 쿠키 값을 기록한다. 로그인 성공 후 Set-Cookie 헤더에서 새로 발급된 세션 값이 이전 값과 달라졌는지 비교한다. 같은 값이면 세션 고정 취약점이 존재한다.",
+    "evidence": "WSTG-SESS-03 원문: 세션 고정 공격은 공격자가 사전에 알고 있는 세션 ID를 피해자가 사용하도록 유도한 뒤, 피해자 로그인 후 동일 세션으로 인증된 접근을 시도하는 방식이다. 로그인 성공 시 반드시 새 세션 ID를 발급해야 한다.",
+    "tags": ["security", "session", "session-fixation", "login", "token"]
+  },
+  {
+    "id": "owasp_upload_001",
+    "title": "허용되지 않은 파일 형식 업로드 검증",
+    "source_name": "OWASP Web Security Testing Guide v4.2 - WSTG-BUSL-08",
+    "source_url": "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/10-Business_Logic_Testing/08-Test_Upload_of_Unexpected_File_Types",
+    "category": "security",
+    "technique": "File Upload Testing",
+    "apply_when": [
+      "파일 업로드 기능이 있는 경우 (프로필 사진, 첨부파일 등)",
+      "사용자가 업로드한 파일이 서버에 저장되는 경우"
+    ],
+    "qa_perspective": [
+      "허용된 확장자(예: jpg, png, pdf) 외의 파일 업로드 시 거부되는지 확인",
+      "클라이언트 측 검증만 존재할 경우 서버 측에서도 동일하게 차단하는지 확인",
+      "Content-Type 헤더를 image/jpeg로 위조한 실행 파일 업로드 시 서버가 거부하는지 확인",
+      "ZIP 등 압축 파일 내부의 허용되지 않은 파일 형식도 차단되는지 확인",
+      "업로드된 파일이 실행 가능한 경로에 저장되지 않는지 확인"
+    ],
+    "risk_type": "MALICIOUS_FILE_UPLOAD",
+    "tdd_hint": "허용되지 않은 확장자(예: .exe, .jsp, .php) 파일을 업로드했을 때 400 또는 415를 반환하는 실패 테스트를 먼저 작성한다.",
+    "example_scenario": "학생 팀 프로젝트의 프로필 사진 업로드 API에 .html 또는 .exe 파일을 업로드한다. 서버가 파일 확장자와 MIME 타입을 모두 검증하여 업로드를 거부하는지 확인한다. Content-Type을 image/png로 위조해도 동일하게 거부되는지도 검증한다.",
+    "evidence": "WSTG-BUSL-08 원문: 클라이언트 측 검증만 의존하는 경우 공격자가 예상치 못한 파일 유형을 제출하여 원격 명령 실행, 시스템 파일 접근 등의 위험을 유발할 수 있다. 서버 측에서 허용 목록(allow list) 기반 검증이 필수다.",
+    "tags": ["security", "upload", "file-type", "mime", "negative-test", "api"]
+  },
+  {
+    "id": "owasp_upload_002",
+    "title": "파일 업로드 크기 및 경로 조작 검증",
+    "source_name": "OWASP Web Security Testing Guide v4.2 - WSTG-BUSL-09",
+    "source_url": "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/10-Business_Logic_Testing/09-Test_Upload_of_Malicious_Files",
+    "category": "security",
+    "technique": "File Upload Testing",
+    "apply_when": [
+      "사용자가 파일명을 직접 지정할 수 있는 업로드 기능이 있는 경우",
+      "업로드된 파일이 서버의 특정 디렉토리에 저장되는 경우"
+    ],
+    "qa_perspective": [
+      "파일명에 경로 구분자(../, ..\\ 등)가 포함된 경우 서버가 이를 거부하거나 무시하는지 확인",
+      "파일 크기 제한이 적용되어 있는지 확인 (과도하게 큰 파일 업로드 시 거부)",
+      "서버가 원래 파일명 대신 무작위로 생성된 이름으로 저장하는지 확인",
+      "업로드된 파일이 웹 루트 외부의 안전한 경로에 저장되는지 확인"
+    ],
+    "risk_type": "PATH_TRAVERSAL",
+    "tdd_hint": "파일명을 '../../../etc/passwd'로 설정한 업로드 요청 시 서버가 이를 거부하거나 파일명을 무해하게 처리하는지 검증하는 테스트를 먼저 작성한다.",
+    "example_scenario": "학생 팀 프로젝트의 파일 업로드 API에서 filename 파라미터를 '../config.txt'로 설정하여 요청한다. 서버가 해당 경로 조작을 무시하고 안전한 경로에 랜덤 파일명으로 저장하는지, 또는 요청 자체를 거부하는지 확인한다.",
+    "evidence": "WSTG-BUSL-09 원문: 악성 파일 업로드는 경로 조작을 통한 시스템 파일 덮어쓰기, 웹셸 설치 등의 위험을 유발한다. 파일명 무작위화와 저장 경로 제한이 필수 방어 수단이다.",
+    "tags": ["security", "upload", "path-traversal", "filename", "negative-test"]
+  },
+  {
+    "id": "owasp_sensitive_001",
+    "title": "암호화되지 않은 채널을 통한 민감 정보 전송 검증",
+    "source_name": "OWASP Web Security Testing Guide v4.2 - WSTG-CRYP-03",
+    "source_url": "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/09-Testing_for_Weak_Cryptography/03-Testing_for_Sensitive_Information_Sent_via_Unencrypted_Channels",
+    "category": "security",
+    "technique": "Sensitive Information Exposure Testing",
+    "apply_when": [
+      "개인정보, 결제정보, 인증정보 등을 전송하는 API가 있는 경우",
+      "외부 네트워크를 통해 데이터를 전송하는 경우"
+    ],
+    "qa_perspective": [
+      "API 응답 바디에 비밀번호가 평문으로 포함되지 않는지 확인",
+      "응답에 카드번호, 주민등록번호 등 민감 개인정보가 마스킹 없이 노출되지 않는지 확인",
+      "디버그 모드 응답이나 에러 스택 트레이스에 민감 정보가 포함되지 않는지 확인",
+      "로그 파일에 비밀번호나 토큰이 기록되지 않는지 확인"
+    ],
+    "risk_type": "SENSITIVE_DATA_EXPOSURE",
+    "tdd_hint": "사용자 조회 API 응답에 password 필드가 포함되지 않는지, 포함되더라도 해시값인지를 검증하는 테스트를 먼저 작성한다.",
+    "example_scenario": "학생 팀 프로젝트의 /api/users/me 응답 JSON을 검사한다. password 또는 secret 키가 포함되어 있는지 확인하고, 포함된 경우 평문인지 확인한다. 또한 에러 응답(500 Internal Server Error)에 DB 스키마나 스택 트레이스가 노출되지 않는지 검증한다.",
+    "evidence": "WSTG-CRYP-03 원문: 민감 정보(인증정보, 개인정보, 금융 데이터)가 보호되지 않은 통신 경로를 통해 전달되면 네트워크 스니핑에 의해 탈취될 수 있다.",
+    "tags": ["security", "sensitive-data", "exposure", "api", "response", "pii"]
+  },
+  {
+    "id": "owasp_api_001",
+    "title": "API 오류 응답의 민감 정보 노출 검증",
+    "source_name": "OWASP Web Security Testing Guide v4.2 - WSTG-ATHN-01, WSTG-CRYP-03",
+    "source_url": "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/04-Authentication_Testing/01-Testing_for_Credentials_Transported_over_an_Encrypted_Channel",
+    "category": "security",
+    "technique": "Authentication Testing / Sensitive Information Exposure",
+    "apply_when": [
+      "REST API 형태의 백엔드가 있는 경우",
+      "인증 실패, 입력 오류 등 다양한 에러 케이스가 발생하는 경우"
+    ],
+    "qa_perspective": [
+      "존재하지 않는 계정과 잘못된 비밀번호 입력 시 동일한 오류 메시지를 반환하는지 확인 (사용자 열거 방지)",
+      "인증 실패 응답에 DB 오류 메시지, 스택 트레이스, SQL 쿼리 등이 포함되지 않는지 확인",
+      "404 응답이 존재하는 리소스와 존재하지 않는 리소스를 구별할 수 없도록 처리되는지 확인",
+      "500 에러 응답에 내부 서버 구조 정보가 노출되지 않는지 확인",
+      "인증 실패 시 401, 권한 없음 시 403 등 적절한 HTTP 상태 코드가 사용되는지 확인"
+    ],
+    "risk_type": "INFORMATION_DISCLOSURE",
+    "tdd_hint": "존재하는 계정에 잘못된 비밀번호를, 존재하지 않는 계정에 임의 비밀번호를 입력했을 때 응답 메시지와 상태 코드가 동일한지 비교하는 테스트를 먼저 작성한다.",
+    "example_scenario": "학생 팀 프로젝트의 로그인 API에 (1) 존재하는 이메일 + 틀린 비밀번호, (2) 존재하지 않는 이메일 + 임의 비밀번호를 각각 요청한다. 두 경우 모두 동일한 메시지(예: '이메일 또는 비밀번호가 올바르지 않습니다')와 401을 반환해야 하며, 어느 케이스에서도 이메일 존재 여부를 드러내지 않아야 한다.",
+    "evidence": "WSTG-ATHN-01 원문: 인증 실패 응답에서 민감한 정보가 노출되지 않아야 하며, 사용자 존재 여부를 드러내는 구분된 오류 메시지는 계정 열거 공격에 악용될 수 있다.",
+    "tags": ["security", "api", "error-response", "information-disclosure", "user-enumeration", "negative-test"]
+  },
+  {
+    "id": "owasp_authz_004",
+    "title": "디렉토리 탐색(Directory Traversal) 경로 우회 검증",
+    "source_name": "OWASP Web Security Testing Guide v4.2 - WSTG-AUTHZ-01",
+    "source_url": "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/05-Authorization_Testing/01-Testing_Directory_Traversal_File_Include",
+    "category": "security",
+    "technique": "Authorization Testing",
+    "apply_when": [
+      "파일 경로나 이름을 파라미터로 받아 서버에서 파일을 처리하는 기능이 있는 경우",
+      "사용자 입력값이 파일 시스템 경로에 직접 사용되는 경우"
+    ],
+    "qa_perspective": [
+      "파일 경로 파라미터에 ../ 또는 ..\\이 포함된 경우 서버가 이를 거부하는지 확인",
+      "파라미터 값이 허용된 디렉토리 범위를 벗어나지 못하도록 검증되는지 확인",
+      "URL 인코딩된 경로 조작 문자(%2e%2e%2f)도 동일하게 차단되는지 확인"
+    ],
+    "risk_type": "PATH_TRAVERSAL",
+    "tdd_hint": "파일 경로 파라미터에 '../' 문자열을 포함한 요청 시 400 Bad Request 또는 403 Forbidden을 반환하는 테스트를 먼저 작성한다.",
+    "example_scenario": "학생 팀 프로젝트에서 /api/files?name=report.pdf 형태의 파일 다운로드 기능이 있다면, name 파라미터를 ../../../etc/passwd로 변경하여 요청한다. 서버가 해당 요청을 거부하거나 허용된 디렉토리 내 파일만 반환하는지 확인한다.",
+    "evidence": "WSTG-AUTHZ-01 원문: 경로 조회(Directory Traversal)는 사용자 입력값이 서버 파일 시스템 경로에 직접 반영될 때 발생하며, 공격자가 인가되지 않은 파일에 접근하거나 민감한 시스템 파일을 열람할 수 있게 한다.",
+    "tags": ["security", "authz", "path-traversal", "file", "directory", "negative-test"]
+  },
+  {
+    "id": "owasp_input_001",
+    "title": "SQL 인젝션 방어 검증",
+    "source_name": "OWASP Web Security Testing Guide v4.2 - WSTG-INPV-05",
+    "source_url": "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05-Testing_for_SQL_Injection",
+    "category": "security",
+    "technique": "Input Validation Testing",
+    "apply_when": [
+      "사용자 입력값이 DB 조회에 사용되는 경우",
+      "검색, 로그인, 필터링 등 입력값을 처리하는 API가 있는 경우"
+    ],
+    "qa_perspective": [
+      "입력 필드에 SQL 특수문자(', --, ;, OR 1=1 등)를 입력했을 때 500 오류나 DB 오류가 노출되지 않는지 확인",
+      "파라미터화된 쿼리(Prepared Statement) 또는 ORM을 사용하는지 확인",
+      "오류 응답에 SQL 쿼리 구조나 테이블명이 노출되지 않는지 확인",
+      "입력값 길이 및 형식 제한이 API 레벨에서도 적용되는지 확인"
+    ],
+    "risk_type": "SQL_INJECTION",
+    "tdd_hint": "검색 파라미터에 ' OR '1'='1 형태의 입력을 전송했을 때 정상 조회 결과가 아닌 400 Bad Request 또는 동일한 결과를 반환하지 않는지 검증하는 테스트를 먼저 작성한다.",
+    "example_scenario": "학생 팀 프로젝트의 검색 API(/api/search?q=test)에서 q 파라미터를 test' OR '1'='1로 변경하여 요청한다. 모든 데이터가 반환되거나 DB 오류가 노출된다면 SQL 인젝션에 취약한 것이다. Prepared Statement 사용 여부를 코드 리뷰로도 병행 확인한다.",
+    "evidence": "WSTG-INPV-05 원문: SQL 인젝션은 사용자 입력이 쿼리에 직접 삽입될 때 발생하며, 데이터 유출·조작·인증 우회 등 심각한 결과를 초래한다. Prepared Statement나 ORM을 통한 파라미터화 처리가 필수 방어 수단이다.",
+    "tags": ["security", "input-validation", "sql-injection", "database", "negative-test"]
+  },
+  {
+    "id": "owasp_input_002",
+    "title": "XSS(크로스 사이트 스크립팅) 방어 검증",
+    "source_name": "OWASP Web Security Testing Guide v4.2 - WSTG-INPV-01, WSTG-INPV-02",
+    "source_url": "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/07-Input_Validation_Testing/01-Testing_for_Reflected_Cross_Site_Scripting",
+    "category": "security",
+    "technique": "Input Validation Testing",
+    "apply_when": [
+      "사용자 입력값이 HTML 페이지에 그대로 출력되는 경우",
+      "게시판, 댓글, 프로필 입력 등 사용자 생성 콘텐츠를 표시하는 기능이 있는 경우"
+    ],
+    "qa_perspective": [
+      "사용자 입력값(<script>, <img onerror> 등 HTML 태그)이 응답에 그대로 출력되지 않고 이스케이프 처리되는지 확인",
+      "저장된 콘텐츠를 다시 조회할 때에도 스크립트가 실행되지 않는지 확인",
+      "URL 파라미터의 값이 그대로 페이지에 반영될 때 이스케이프 처리되는지 확인",
+      "Content-Security-Policy(CSP) 헤더가 응답에 포함되는지 확인"
+    ],
+    "risk_type": "XSS",
+    "tdd_hint": "입력 필드에 <script>alert(1)</script>를 입력한 후 해당 값이 응답 HTML에 &lt;script&gt;로 이스케이프되어 출력되는지 검증하는 테스트를 먼저 작성한다.",
+    "example_scenario": "학생 팀 프로젝트의 게시글 작성 API에 content 필드로 '<script>alert(\"xss\")</script>'를 저장한다. 이후 게시글 조회 시 해당 내용이 이스케이프된 문자열로 반환되는지 확인한다. 응답 헤더에 Content-Security-Policy가 포함되어 있는지도 추가로 검사한다.",
+    "evidence": "WSTG-INPV-01, WSTG-INPV-02 원문: XSS는 공격자가 다른 사용자의 브라우저에서 악성 스크립트를 실행시키는 공격이다. 반사형과 저장형 모두 사용자 입력의 출력 시점에 적절한 인코딩/이스케이프 처리가 필요하다.",
+    "tags": ["security", "input-validation", "xss", "html", "output-encoding", "csp"]
+  }
+]
