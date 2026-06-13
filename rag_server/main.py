@@ -39,7 +39,6 @@ async def process_job(job_data: dict):
     logger.info(f"Worker processing RAG job {analysis_id}")
 
     mock_rag = os.getenv("MOCK_RAG", "true").lower() == "true"
-    mock_llm = os.getenv("MOCK_LLM", "true").lower() == "true"
 
     pipeline_trace = []
 
@@ -114,12 +113,12 @@ async def process_job(job_data: dict):
 
             t0 = time.time()
             evidences = retrieve_evidences(req_text)
-            elapsed_retrieve = int((time.time() - t0) * 1000)
+            elapsed_retrieve += int((time.time() - t0) * 1000)
 
             if not mock_rag:
                 for ev in evidences:
                     sc = ev.get("score", 0.0)
-                    if sc and sc > top_score:
+                    if sc is not None and sc > top_score:
                         top_score = sc
 
             limited_evidences = evidences[:3]
