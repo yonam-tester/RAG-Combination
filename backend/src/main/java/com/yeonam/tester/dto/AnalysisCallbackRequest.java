@@ -10,6 +10,7 @@ public class AnalysisCallbackRequest {
     private List<String> missingItems;
     private String status;
     private String errorMessage;
+    @JsonAlias({"pipelineTrace", "pipeline_trace"})
     private List<Map<String, Object>> pipelineTrace;
 
     public AnalysisCallbackRequest() {}
