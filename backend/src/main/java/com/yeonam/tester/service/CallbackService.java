@@ -1,5 +1,6 @@
 package com.yeonam.tester.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yeonam.tester.domain.*;
 import com.yeonam.tester.dto.AnalysisCallbackRequest;
 import com.yeonam.tester.repository.*;
@@ -25,6 +26,7 @@ public class CallbackService {
     private final PriorityEvaluator priorityEvaluator;
     private final RiskDetector riskDetector;
     private final FallbackHandler fallbackHandler;
+    private final ObjectMapper objectMapper;
 
     public CallbackService(AnalysisJobRepository analysisJobRepository,
                            RequirementRepository requirementRepository,
@@ -33,7 +35,8 @@ public class CallbackService {
                            EvidenceRepository evidenceRepository,
                            PriorityEvaluator priorityEvaluator,
                            RiskDetector riskDetector,
-                           FallbackHandler fallbackHandler) {
+                           FallbackHandler fallbackHandler,
+                           ObjectMapper objectMapper) {
         this.analysisJobRepository = analysisJobRepository;
         this.requirementRepository = requirementRepository;
         this.testCaseRepository = testCaseRepository;
@@ -42,6 +45,7 @@ public class CallbackService {
         this.priorityEvaluator = priorityEvaluator;
         this.riskDetector = riskDetector;
         this.fallbackHandler = fallbackHandler;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -64,6 +68,14 @@ public class CallbackService {
         // 1. Update Job Summary & Status & Missing Items
         job.setSummary(request.getSummary());
         job.setStatus("COMPLETED");
+
+        if (request.getPipelineTrace() != null && !request.getPipelineTrace().isEmpty()) {
+            try {
+                job.setPipelineTrace(objectMapper.writeValueAsString(request.getPipelineTrace()));
+            } catch (Exception e) {
+                log.warn("Failed to serialize pipeline trace for job {}: {}", analysisId, e.getMessage());
+            }
+        }
 
         if (request.getMissingItems() != null && !request.getMissingItems().isEmpty()) {
             job.setMissingItemsText(String.join(";", request.getMissingItems()));
