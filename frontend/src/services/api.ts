@@ -97,11 +97,24 @@ export interface TestCase {
   analysisId: string;
 }
 
+export interface PipelineTraceStep {
+  step: 'PARSE' | 'CHUNK' | 'INDEX' | 'EXTRACT' | 'RETRIEVE';
+  status: 'SUCCESS' | 'SKIPPED' | 'FAILED';
+  durationMs: number;
+  fileCount?: number;
+  chunkCount?: number;
+  vectorCount?: number;
+  reqCount?: number;
+  topScore?: number;
+  errorMessage?: string;
+}
+
 export interface AnalysisResultResponse {
   analysisId: string;
   summary: string;
   testCases: TestCase[];
   missingItems: string[];
+  pipelineTrace?: PipelineTraceStep[];
 }
 
 export interface ReportItem {
