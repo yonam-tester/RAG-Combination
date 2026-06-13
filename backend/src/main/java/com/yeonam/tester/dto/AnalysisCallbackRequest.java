@@ -1,6 +1,7 @@
 package com.yeonam.tester.dto;
 
 import java.util.List;
+import java.util.Map;
 import com.fasterxml.jackson.annotation.JsonAlias;
 
 public class AnalysisCallbackRequest {
@@ -9,6 +10,7 @@ public class AnalysisCallbackRequest {
     private List<String> missingItems;
     private String status;
     private String errorMessage;
+    private List<Map<String, Object>> pipelineTrace;
 
     public AnalysisCallbackRequest() {}
 
@@ -34,6 +36,9 @@ public class AnalysisCallbackRequest {
 
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+
+    public List<Map<String, Object>> getPipelineTrace() { return pipelineTrace; }
+    public void setPipelineTrace(List<Map<String, Object>> pipelineTrace) { this.pipelineTrace = pipelineTrace; }
 
     public static AnalysisCallbackRequestBuilder builder() {
         return new AnalysisCallbackRequestBuilder();
@@ -331,6 +336,7 @@ public class AnalysisCallbackRequest {
         private List<String> missingItems;
         private String status;
         private String errorMessage;
+        private List<Map<String, Object>> pipelineTrace;
 
         public AnalysisCallbackRequestBuilder summary(String summary) {
             this.summary = summary;
@@ -357,8 +363,15 @@ public class AnalysisCallbackRequest {
             return this;
         }
 
+        public AnalysisCallbackRequestBuilder pipelineTrace(List<Map<String, Object>> pipelineTrace) {
+            this.pipelineTrace = pipelineTrace;
+            return this;
+        }
+
         public AnalysisCallbackRequest build() {
-            return new AnalysisCallbackRequest(summary, testCases, missingItems, status, errorMessage);
+            AnalysisCallbackRequest req = new AnalysisCallbackRequest(summary, testCases, missingItems, status, errorMessage);
+            req.setPipelineTrace(pipelineTrace);
+            return req;
         }
     }
 }
