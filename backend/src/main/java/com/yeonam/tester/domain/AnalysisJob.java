@@ -29,6 +29,9 @@ public class AnalysisJob {
     @Column(name = "missing_items_text", length = 2000)
     private String missingItemsText;
 
+    @Column(name = "pipeline_trace", columnDefinition = "TEXT")
+    private String pipelineTrace;
+
     public AnalysisJob() {}
 
     public AnalysisJob(String analysisId, Project project, String qaPerspective, String customPrompt, String summary, String status) {
@@ -71,6 +74,9 @@ public class AnalysisJob {
     public String getMissingItemsText() { return missingItemsText; }
     public void setMissingItemsText(String missingItemsText) { this.missingItemsText = missingItemsText; }
 
+    public String getPipelineTrace() { return pipelineTrace; }
+    public void setPipelineTrace(String pipelineTrace) { this.pipelineTrace = pipelineTrace; }
+
     public static AnalysisJobBuilder builder() {
         return new AnalysisJobBuilder();
     }
@@ -83,6 +89,7 @@ public class AnalysisJob {
         private String summary;
         private String status;
         private String missingItemsText;
+        private String pipelineTrace;
 
         public AnalysisJobBuilder analysisId(String analysisId) {
             this.analysisId = analysisId;
@@ -119,8 +126,15 @@ public class AnalysisJob {
             return this;
         }
 
+        public AnalysisJobBuilder pipelineTrace(String pipelineTrace) {
+            this.pipelineTrace = pipelineTrace;
+            return this;
+        }
+
         public AnalysisJob build() {
-            return new AnalysisJob(analysisId, project, qaPerspective, customPrompt, summary, status, missingItemsText);
+            AnalysisJob job = new AnalysisJob(analysisId, project, qaPerspective, customPrompt, summary, status, missingItemsText);
+            job.setPipelineTrace(pipelineTrace);
+            return job;
         }
     }
 }
