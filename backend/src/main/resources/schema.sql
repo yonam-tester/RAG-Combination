@@ -41,6 +41,7 @@ CREATE TABLE analysis_job (
     summary TEXT,
     status VARCHAR(50) NOT NULL,
     missing_items_text VARCHAR(2000),
+    pipeline_trace TEXT,
     CONSTRAINT fk_job_project FOREIGN KEY (project_id) REFERENCES project(project_id) ON DELETE CASCADE
 );
 CREATE INDEX idx_job_project ON analysis_job(project_id);
