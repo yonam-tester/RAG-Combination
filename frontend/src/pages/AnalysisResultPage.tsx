@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { analysisApi, reportApi, TestCase, Evidence } from '../services/api';
+import { RagTraceModal } from './RagTraceModal';
+import { PipelineTraceStep } from '../services/api';
 
 // Subcomponent: Evidence Accordion
 const EvidenceAccordion: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
@@ -254,6 +256,8 @@ export const AnalysisResultPage: React.FC = () => {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportFormat, setReportFormat] = useState<'MARKDOWN' | 'PDF'>('MARKDOWN');
   const [reportGenerating, setReportGenerating] = useState(false);
+  const [isTraceModalOpen, setIsTraceModalOpen] = useState(false);
+  const [pipelineTrace, setPipelineTrace] = useState<PipelineTraceStep[]>([]);
 
   useEffect(() => {
     if (analysisId) {
@@ -269,6 +273,7 @@ export const AnalysisResultPage: React.FC = () => {
       const response = await analysisApi.getResults(id);
       setSummary(response.data.summary);
       setTestCases(response.data.testCases);
+      setPipelineTrace(response.data.pipelineTrace || []);
       if (response.data.testCases) {
         setSelectedTestCaseIds(response.data.testCases.map((tc: TestCase) => tc.testCaseId));
       }
@@ -356,6 +361,18 @@ export const AnalysisResultPage: React.FC = () => {
               </div>
             </div>
           </div>
+          <button
+            onClick={() => setIsTraceModalOpen(true)}
+            disabled={pipelineTrace.length === 0}
+            className={`mt-4 md:mt-0 md:ml-auto self-end flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+              pipelineTrace.length > 0
+                ? 'border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20'
+                : 'border-white/5 bg-white/5 text-slate-600 cursor-not-allowed'
+            }`}
+          >
+            <span className="material-symbols-outlined text-sm">biotech</span>
+            RAG 진단
+          </button>
         </div>
       </section>
 
@@ -535,6 +552,14 @@ export const AnalysisResultPage: React.FC = () => {
       </section>
 
       {/* Report Format Selection Modal */}
+      {isTraceModalOpen && (
+        <RagTraceModal
+          analysisId={analysisId}
+          trace={pipelineTrace}
+          onClose={() => setIsTraceModalOpen(false)}
+        />
+      )}
+
       {isReportModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="glass-panel-heavy max-w-sm w-full p-6 space-y-6 border-white/20">
