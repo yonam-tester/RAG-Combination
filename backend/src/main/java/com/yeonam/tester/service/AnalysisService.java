@@ -1,5 +1,7 @@
 package com.yeonam.tester.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yeonam.tester.domain.*;
 import com.yeonam.tester.dto.*;
 import com.yeonam.tester.repository.*;
@@ -20,6 +22,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class AnalysisService {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AnalysisService.class);
 
     private final AnalysisJobRepository analysisJobRepository;
     private final ProjectRepository projectRepository;
@@ -42,6 +46,7 @@ public class AnalysisService {
     private boolean llmDirect;
 
     private final AnalysisProcessor analysisProcessor;
+    private final ObjectMapper objectMapper;
 
     public AnalysisService(AnalysisJobRepository analysisJobRepository,
                            ProjectRepository projectRepository,
@@ -52,7 +57,8 @@ public class AnalysisService {
                            EvidenceRepository evidenceRepository,
                            S3Client s3Client,
                            ReportRepository reportRepository,
-                           AnalysisProcessor analysisProcessor) {
+                           AnalysisProcessor analysisProcessor,
+                           ObjectMapper objectMapper) {
         this.analysisJobRepository = analysisJobRepository;
         this.projectRepository = projectRepository;
         this.fileRepository = fileRepository;
@@ -63,6 +69,7 @@ public class AnalysisService {
         this.s3Client = s3Client;
         this.reportRepository = reportRepository;
         this.analysisProcessor = analysisProcessor;
+        this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .build();
@@ -377,11 +384,24 @@ public class AnalysisService {
             }
         }
 
+        List<Map<String, Object>> pipelineTrace = new ArrayList<>();
+        if (job.getPipelineTrace() != null && !job.getPipelineTrace().isBlank()) {
+            try {
+                pipelineTrace = objectMapper.readValue(
+                    job.getPipelineTrace(),
+                    new TypeReference<List<Map<String, Object>>>() {}
+                );
+            } catch (Exception e) {
+                log.warn("Failed to deserialize pipeline trace for job {}: {}", analysisId, e.getMessage());
+            }
+        }
+
         return AnalysisResultResponse.builder()
                 .analysisId(analysisId)
                 .summary(job.getSummary() != null ? job.getSummary() : "전체 기능 명세 요구사항 분석 요약 완료.")
                 .testCases(tcDtos)
                 .missingItems(missing)
+                .pipelineTrace(pipelineTrace)
                 .build();
     }
 
