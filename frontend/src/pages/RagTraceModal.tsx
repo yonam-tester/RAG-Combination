@@ -67,6 +67,7 @@ export const RagTraceModal: React.FC<Props> = ({ analysisId, trace, onClose }) =
             </span>
             <button
               onClick={onClose}
+              aria-label="닫기"
               className="text-slate-400 hover:text-white transition-colors"
             >
               <span className="material-symbols-outlined">close</span>

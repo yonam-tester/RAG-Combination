@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { analysisApi, reportApi, TestCase, Evidence } from '../services/api';
+import { analysisApi, reportApi, TestCase, Evidence, PipelineTraceStep } from '../services/api';
 import { RagTraceModal } from './RagTraceModal';
-import { PipelineTraceStep } from '../services/api';
 
 // Subcomponent: Evidence Accordion
 const EvidenceAccordion: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
