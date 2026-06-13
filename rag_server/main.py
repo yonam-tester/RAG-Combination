@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 import logging
 import os
+import time
 from typing import List, Optional
 from pydantic import BaseModel
 
@@ -34,70 +35,105 @@ async def process_job(job_data: dict):
     perspectives = job_data.get("qaPerspectives", [])
     custom_prompt = job_data.get("customPrompt", "")
     llm_api_key = job_data.get("llmApiKey")
-    
+
     logger.info(f"Worker processing RAG job {analysis_id}")
-    
+
     mock_rag = os.getenv("MOCK_RAG", "true").lower() == "true"
     mock_llm = os.getenv("MOCK_LLM", "true").lower() == "true"
-    
+
+    pipeline_trace = []
+
     try:
         requirements = []
         chunks = []
-        
+
         if not mock_rag:
-            # 1. Download and parse documents from S3
+            # Step 1: PARSE
+            t0 = time.time()
             logger.info("Downloading and parsing documents from S3...")
-            parsed_documents = await process_and_extract(s3_paths) # list of dict: {file_id, file_name, text}
-            
-            # 2. Text clean and chunking
+            parsed_documents = await process_and_extract(s3_paths)
+            pipeline_trace.append({
+                "step": "PARSE",
+                "status": "SUCCESS",
+                "fileCount": len(parsed_documents),
+                "durationMs": int((time.time() - t0) * 1000)
+            })
+
+            # Step 2: CHUNK
+            t0 = time.time()
             logger.info("Cleaning and chunking parsed text...")
             for doc in parsed_documents:
                 doc_chunks = chunk_document(doc["text"], doc["file_id"], doc["file_name"])
                 chunks.extend(doc_chunks)
-            
-            # 3. Build/Index local FAISS Vector DB or Bedrock Knowledge Base
+            pipeline_trace.append({
+                "step": "CHUNK",
+                "status": "SUCCESS",
+                "chunkCount": len(chunks),
+                "durationMs": int((time.time() - t0) * 1000)
+            })
+
+            # Step 3: INDEX
+            t0 = time.time()
             logger.info(f"Indexing {len(chunks)} chunks to vector database...")
             vector_db_manager.add_chunks(chunks)
-            
-            # 4. Extract requirements from document text
+            pipeline_trace.append({
+                "step": "INDEX",
+                "status": "SUCCESS",
+                "vectorCount": len(chunks),
+                "durationMs": int((time.time() - t0) * 1000)
+            })
+
+            # Step 4: EXTRACT
+            t0 = time.time()
             logger.info("Extracting requirements from document text...")
             requirements = await extract_requirements(parsed_documents, llm_api_key)
+            pipeline_trace.append({
+                "step": "EXTRACT",
+                "status": "SUCCESS",
+                "reqCount": len(requirements),
+                "durationMs": int((time.time() - t0) * 1000)
+            })
         else:
             logger.info("MOCK_RAG is enabled, skipping S3 download, parsing, chunking, and indexing.")
-            # In mock RAG mode, extract_requirements returns static/mocked requirements
+            pipeline_trace = [
+                {"step": "PARSE",    "status": "SKIPPED", "durationMs": 0},
+                {"step": "CHUNK",    "status": "SKIPPED", "durationMs": 0},
+                {"step": "INDEX",    "status": "SKIPPED", "durationMs": 0},
+                {"step": "EXTRACT",  "status": "SKIPPED", "durationMs": 0},
+                {"step": "RETRIEVE", "status": "SKIPPED", "durationMs": 0},
+            ]
             requirements = await extract_requirements([], llm_api_key)
-            
-        # 5. Hybrid retrieve and merge contexts for each requirement
-        logger.info("Retrieving evidences and merging QA knowledge...")
+
         test_cases = []
-        
-        # We process each requirement to generate test cases
+        top_score = 0.0
+        elapsed_retrieve = 0
+
         for req in requirements:
             req_id = req["id"]
             req_text = req["text"]
-            
-            # Retrieve evidence chunks for this requirement
-            # If mock_rag is enabled, retrieve_evidences will return mock evidence metadata
-            evidences = retrieve_evidences(req_text) # list of dict: {chunk_id, text, source_name, source_section, score}
-            
-            # Limit to at most 3 evidences (Task 7.7 requirement)
+
+            t0 = time.time()
+            evidences = retrieve_evidences(req_text)
+            elapsed_retrieve = int((time.time() - t0) * 1000)
+
+            if not mock_rag:
+                for ev in evidences:
+                    sc = ev.get("score", 0.0)
+                    if sc and sc > top_score:
+                        top_score = sc
+
             limited_evidences = evidences[:3]
-            
-            # 6. Build prompt using prompt builder (with truncation and tags)
+
             prompt = build_prompt(req_text, limited_evidences, custom_prompt, perspectives)
-            
-            # 7. Call LLM (or mock)
+
             logger.info(f"Calling LLM for requirement {req_id}...")
             raw_test_cases = await call_llm_with_key(prompt, llm_api_key)
-            
-            # Add metadata back
+
             for tc in raw_test_cases:
                 tc["requirementId"] = req_id
                 tc["requirementText"] = req_text
-                # Attach evidence list (Task 8.2 & 8.3 preparation)
                 tc["evidence_list"] = limited_evidences
-                
-                # Format testSteps to List[str] if it is a String
+
                 if "testSteps" in tc:
                     if isinstance(tc["testSteps"], str):
                         tc["testSteps"] = [s.strip() for s in tc["testSteps"].split("\n") if s.strip()]
@@ -105,28 +141,34 @@ async def process_job(job_data: dict):
                         tc["testSteps"] = []
                 else:
                     tc["testSteps"] = []
-                    
+
                 test_cases.append(tc)
-                
-        # 8. Webhook callback to Spring Boot
+
+        if not mock_rag:
+            pipeline_trace.append({
+                "step": "RETRIEVE",
+                "status": "SUCCESS",
+                "topScore": round(top_score, 4),
+                "durationMs": elapsed_retrieve
+            })
+
         formatted_data = {
             "analysisId": analysis_id,
             "status": "COMPLETED",
             "summary": f"RAG 기반 분석 완료. 추출된 요구사항 수: {len(requirements)}, 생성된 테스트 케이스 수: {len(test_cases)}.",
             "testCases": test_cases,
-            "errorMessage": None
+            "errorMessage": None,
+            "pipelineTrace": pipeline_trace
         }
-        
+
         success = await send_callback(analysis_id, formatted_data)
         if not success:
             logger.error(f"Failed to send RAG webhook callback for job {analysis_id}")
-            
+
     except Exception as e:
         logger.error(f"Error while executing RAG worker for job {analysis_id}: {str(e)}", exc_info=True)
-        # Send failure callback to backend
         try:
             error_msg = f"RAG 서버 분석 중 예외 발생: {str(e)}"
-            # Check if it is an API Key verification failure
             if "AuthenticationError" in type(e).__name__ or "api key" in str(e).lower() or "api_key" in str(e).lower():
                 error_msg = "API 키 유효성 검증 실패: 유효하지 않은 API 키이거나 만료되었습니다. 키 설정을 재점검해 주세요."
             await send_failure_callback(analysis_id, error_msg)
