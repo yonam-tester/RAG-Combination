@@ -1,12 +1,14 @@
 package com.yeonam.tester.dto;
 
 import java.util.List;
+import java.util.Map;
 
 public class AnalysisResultResponse {
     private String analysisId;
     private String summary;
     private List<TestCaseDto> testCases;
     private List<String> missingItems;
+    private List<Map<String, Object>> pipelineTrace;
 
     public AnalysisResultResponse() {}
 
@@ -28,6 +30,9 @@ public class AnalysisResultResponse {
 
     public List<String> getMissingItems() { return missingItems; }
     public void setMissingItems(List<String> missingItems) { this.missingItems = missingItems; }
+
+    public List<Map<String, Object>> getPipelineTrace() { return pipelineTrace; }
+    public void setPipelineTrace(List<Map<String, Object>> pipelineTrace) { this.pipelineTrace = pipelineTrace; }
 
     public static AnalysisResultResponseBuilder builder() {
         return new AnalysisResultResponseBuilder();
@@ -318,6 +323,7 @@ public class AnalysisResultResponse {
         private String summary;
         private List<TestCaseDto> testCases;
         private List<String> missingItems;
+        private List<Map<String, Object>> pipelineTrace;
 
         public AnalysisResultResponseBuilder analysisId(String analysisId) {
             this.analysisId = analysisId;
@@ -339,8 +345,15 @@ public class AnalysisResultResponse {
             return this;
         }
 
+        public AnalysisResultResponseBuilder pipelineTrace(List<Map<String, Object>> pipelineTrace) {
+            this.pipelineTrace = pipelineTrace;
+            return this;
+        }
+
         public AnalysisResultResponse build() {
-            return new AnalysisResultResponse(analysisId, summary, testCases, missingItems);
+            AnalysisResultResponse r = new AnalysisResultResponse(analysisId, summary, testCases, missingItems);
+            r.setPipelineTrace(pipelineTrace);
+            return r;
         }
     }
 }
