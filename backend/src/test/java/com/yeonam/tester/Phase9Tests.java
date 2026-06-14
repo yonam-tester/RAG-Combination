@@ -106,8 +106,6 @@ class Phase9Tests {
             assertNotNull(s.get("expectedResult"));
             assertNotNull(s.get("priority"));
         }
-
-        reportService.deleteReport(response.getReportId());
     }
 
     @Test
@@ -154,8 +152,6 @@ class Phase9Tests {
 
         Report savedReport = reportRepository.findById(response.getReportId()).orElseThrow();
         assertNull(savedReport.getAdditionalScenarios(), "additionalScenarios must be null when targetCount=0");
-
-        reportService.deleteReport(response.getReportId());
     }
 
     @Test
@@ -217,7 +213,5 @@ class Phase9Tests {
         assertTrue(content.contains("보완 테스트 시나리오"), "보완 섹션 헤더가 포함되어야 함");
         assertTrue(content.contains("보완-2"), "보완-2 시나리오가 포함되어야 함");
         assertTrue(content.contains("보완-3"), "보완-3 시나리오가 포함되어야 함");
-
-        reportService.deleteReport(response.getReportId());
     }
 }
