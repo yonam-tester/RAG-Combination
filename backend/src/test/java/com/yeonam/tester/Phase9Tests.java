@@ -185,4 +185,57 @@ class Phase9Tests {
                     .build())
         );
     }
+
+    @Test
+    @Transactional
+    void testMarkdownContainsSupplementarySectionWhenCountExceedsExisting() {
+        Project project = Project.builder()
+                .projectId("PRJ-P9-RENDER")
+                .name("P9 Render Project")
+                .createdAt(java.time.LocalDateTime.now())
+                .build();
+        projectRepository.saveAndFlush(project);
+
+        AnalysisJob job = AnalysisJob.builder()
+                .analysisId("ANL-P9-RENDER")
+                .project(project)
+                .status("COMPLETED")
+                .summary("렌더링 테스트 요약")
+                .qaPerspective("API")
+                .build();
+        analysisJobRepository.saveAndFlush(job);
+
+        Requirement req = Requirement.builder()
+                .requirementId("REQ-P9-RENDER")
+                .analysisJob(job)
+                .requirementText("렌더링 요구사항")
+                .build();
+        requirementRepository.saveAndFlush(req);
+
+        TestCase tc = TestCase.builder()
+                .testCaseId("TC-P9-RENDER-001")
+                .analysisJob(job)
+                .requirement(req)
+                .testCaseName("기본 케이스")
+                .testScenario("기본 시나리오")
+                .expectedResult("기본 결과")
+                .priority("HIGH")
+                .build();
+        testCaseRepository.saveAndFlush(tc);
+
+        ReportCreateRequest request = ReportCreateRequest.builder()
+                .reportFormat("MARKDOWN")
+                .targetScenarioCount(3)
+                .build();
+        ReportResponse response = reportService.generateReport("ANL-P9-RENDER", request);
+
+        var preview = reportService.getReportPreview(response.getReportId());
+        String content = preview.getContent();
+
+        assertTrue(content.contains("보완 테스트 시나리오"), "보완 섹션 헤더가 포함되어야 함");
+        assertTrue(content.contains("보완-2"), "보완-2 시나리오가 포함되어야 함");
+        assertTrue(content.contains("보완-3"), "보완-3 시나리오가 포함되어야 함");
+
+        reportService.deleteReport(response.getReportId());
+    }
 }

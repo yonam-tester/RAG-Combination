@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -115,6 +116,26 @@ public class ReportRenderEngine {
                         }
                     }
                 }
+                sb.append("\n");
+            }
+        }
+
+        // 4. 보완 시나리오 섹션 (additionalScenarios가 있을 경우만)
+        List<Map<String, Object>> additionalScenarios =
+                (List<Map<String, Object>>) model.getOrDefault("additionalScenarios", Collections.emptyList());
+        if (!additionalScenarios.isEmpty()) {
+            sb.append("## 4. 보완 테스트 시나리오 (LLM 추가 생성)\n\n");
+            int baseIndex = testCases.size() + 1;
+            for (int i = 0; i < additionalScenarios.size(); i++) {
+                Map<String, Object> s = additionalScenarios.get(i);
+                sb.append("### 보완-").append(baseIndex + i).append(": ")
+                  .append(s.getOrDefault("testCaseName", "보완 시나리오")).append("\n");
+                sb.append("- **우선순위**: `")
+                  .append(s.getOrDefault("priority", "MEDIUM")).append("`\n");
+                sb.append("- **테스트 시나리오**: ")
+                  .append(s.getOrDefault("testScenario", "")).append("\n");
+                sb.append("- **기대 결과**: ")
+                  .append(s.getOrDefault("expectedResult", "")).append("\n");
                 sb.append("\n");
             }
         }
