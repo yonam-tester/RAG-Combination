@@ -50,7 +50,7 @@ async def process_job(job_data: dict):
             # Step 1: PARSE
             t0 = time.time()
             logger.info("Downloading and parsing documents from S3...")
-            parsed_documents = await process_and_extract(s3_paths)
+            parsed_documents = await process_and_extract(s3_paths, llm_api_key)
             pipeline_trace.append({
                 "step": "PARSE",
                 "status": "SUCCESS",
@@ -106,14 +106,16 @@ async def process_job(job_data: dict):
         test_cases = []
         top_score = 0.0
         elapsed_retrieve = 0
+        seen_chunk_ids: set = set()
 
         for req in requirements:
             req_id = req["id"]
             req_text = req["text"]
 
             t0 = time.time()
-            evidences = retrieve_evidences(req_text)
+            evidences = retrieve_evidences(req_text, exclude_chunk_ids=seen_chunk_ids)
             elapsed_retrieve += int((time.time() - t0) * 1000)
+            seen_chunk_ids.update(ev["chunk_id"] for ev in evidences)
 
             if not mock_rag:
                 for ev in evidences:

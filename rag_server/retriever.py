@@ -151,13 +151,20 @@ def load_knowledge_base() -> List[Dict]:
 # Load knowledge cards once
 knowledge_cards = load_knowledge_base()
 
-def retrieve_evidences(query: str, threshold: float = 0.35) -> List[Dict]:
+def retrieve_evidences(query: str, threshold: float = 0.35, exclude_chunk_ids: set = None) -> List[Dict]:
     """
-    Retrieves evidence chunks from local vector store and performs hybrid search 
+    Retrieves evidence chunks from local vector store and performs hybrid search
     with the QA knowledge base, sorting and merging by score.
+
+    Args:
+        exclude_chunk_ids: chunk_id set already used in prior retrieve calls for
+                           the same analysis job. Prevents cross-requirement duplicates.
     """
+    if exclude_chunk_ids is None:
+        exclude_chunk_ids = set()
+
     mock_rag = os.getenv("MOCK_RAG", "true").lower() == "true"
-    
+
     if mock_rag:
         logger.info(f"MOCK_RAG enabled. Returning mock evidence chunks for query: '{query}'")
         # Return realistic mockup evidence matching the query context
@@ -231,9 +238,19 @@ def retrieve_evidences(query: str, threshold: float = 0.35) -> List[Dict]:
     kb_results.sort(key=lambda x: x["score"], reverse=True)
     kb_results = kb_results[:3]
     
-    # 3. Merge and Sort
-    merged_results = filtered_docs + kb_results
-    merged_results.sort(key=lambda x: x["score"], reverse=True)
-    
-    logger.info(f"Retrieved {len(merged_results)} merged evidence chunks.")
-    return merged_results
+    # 3. Merge, deduplicate by chunk_id, and sort
+    seen_ids: set = set(exclude_chunk_ids)
+    deduped_results = []
+    for item in filtered_docs + kb_results:
+        cid = item["chunk_id"]
+        if cid not in seen_ids:
+            seen_ids.add(cid)
+            deduped_results.append(item)
+
+    deduped_results.sort(key=lambda x: x["score"], reverse=True)
+
+    skipped = (len(filtered_docs) + len(kb_results)) - len(deduped_results)
+    if skipped:
+        logger.info(f"Deduped {skipped} already-seen chunk(s) from results.")
+    logger.info(f"Retrieved {len(deduped_results)} unique evidence chunks.")
+    return deduped_results

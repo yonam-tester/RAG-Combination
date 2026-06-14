@@ -2,7 +2,9 @@ import os
 import boto3
 import logging
 import uuid
+from typing import Optional
 import fitz  # PyMuPDF
+import litellm
 from botocore.client import Config
 from docx import Document
 
@@ -123,10 +125,43 @@ def parse_docx(file_path: str) -> str:
     logger.info(f"Parsing DOCX: {file_path}")
     try:
         doc = Document(file_path)
-        text = []
-        for paragraph in doc.paragraphs:
-            text.append(paragraph.text)
-        return "\n".join(text)
+        items = []
+
+        # Collect paragraphs and tables in document order via the XML body
+        from docx.oxml.ns import qn
+        for child in doc.element.body:
+            tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+
+            if tag == "p":
+                from docx.text.paragraph import Paragraph
+                para = Paragraph(child, doc)
+                style = para.style.name if para.style else ""
+                text = para.text.strip()
+                if not text:
+                    continue
+                # Promote Word Heading styles to Markdown headings
+                if style.startswith("Heading 1"):
+                    items.append(f"# {text}")
+                elif style.startswith("Heading 2"):
+                    items.append(f"## {text}")
+                elif style.startswith("Heading 3"):
+                    items.append(f"### {text}")
+                else:
+                    items.append(text)
+
+            elif tag == "tbl":
+                from docx.table import Table
+                table = Table(child, doc)
+                rows = []
+                for i, row in enumerate(table.rows):
+                    cells = [cell.text.strip().replace("\n", " ") for cell in row.cells]
+                    rows.append("| " + " | ".join(cells) + " |")
+                    if i == 0:
+                        rows.append("|" + "|".join(["---"] * len(cells)) + "|")
+                if rows:
+                    items.append("\n".join(rows))
+
+        return "\n\n".join(items)
     except Exception as e:
         logger.error(f"Error parsing DOCX {file_path}: {str(e)}")
         raise e
@@ -168,9 +203,65 @@ def extract_file_id_from_path(s3_path: str) -> str:
             return parts[0]
     return str(uuid.uuid4())
 
-async def process_and_extract(s3_paths: list) -> list:
+_LLM_ENHANCE_SEGMENT = 3000
+_LLM_ENHANCE_OVERLAP  = 200
+
+async def enhance_text_with_llm(raw_text: str, file_name: str,
+                                 llm_api_key: Optional[str] = None) -> str:
+    """
+    Hybrid post-processing step: splits raw text into segments and asks the LLM
+    to reformat each segment as clean Markdown (heading detection + table serialisation).
+    Falls back to the original segment on any error.
+    """
+    model = os.getenv("LLM_MODEL", "gpt-4o-mini")
+    segments: list[str] = []
+    start = 0
+    while start < len(raw_text):
+        end = min(start + _LLM_ENHANCE_SEGMENT, len(raw_text))
+        segments.append(raw_text[start:end])
+        if end == len(raw_text):
+            break
+        start = end - _LLM_ENHANCE_OVERLAP
+
+    logger.info(f"LLM enhancement: {len(segments)} segment(s) for '{file_name}' via {model}")
+    enhanced: list[str] = []
+
+    for i, seg in enumerate(segments):
+        prompt = (
+            "소프트웨어 설계/요구사항 문서(SDD/SRS)에서 추출한 텍스트입니다. "
+            "아래 규칙에 따라 정제된 Markdown으로 변환하세요.\n\n"
+            "규칙:\n"
+            "1. 섹션·챕터 제목 → ## 또는 ### Markdown 헤딩\n"
+            "2. 테이블 데이터(열 이름 반복, 행 나열) → '- 항목: 값' bullet list\n"
+            "3. 페이지 번호·반복 머리글·바닥글 제거\n"
+            "4. 내용 요약·변형 금지 — 구조 개선만 수행\n"
+            "5. 순수 텍스트만 출력 (코드 블록 불필요)\n\n"
+            f"[파일: {file_name}  세그먼트 {i + 1}/{len(segments)}]\n"
+            f"{seg}"
+        )
+        try:
+            kwargs: dict = {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.1,
+            }
+            if llm_api_key:
+                kwargs["api_key"] = llm_api_key
+            resp = await litellm.acompletion(**kwargs)
+            enhanced.append(resp.choices[0].message.content.strip())
+        except Exception as e:
+            logger.warning(f"LLM enhancement failed for segment {i + 1}: {e}. Using original text.")
+            enhanced.append(seg)
+
+    return "\n\n".join(enhanced)
+
+
+async def process_and_extract(s3_paths: list,
+                               llm_api_key: Optional[str] = None) -> list:
     """
     Downloads and extracts text from all given S3 paths.
+    When llm_api_key is provided, applies LLM-based structure enhancement
+    after rule-based parsing (Hybrid mode).
     Returns a list of dicts: [{"file_id": ..., "file_name": ..., "text": ...}]
     """
     parsed_documents = []
@@ -181,7 +272,10 @@ async def process_and_extract(s3_paths: list) -> list:
             file_text = extract_text_from_file(local_path)
             file_id = extract_file_id_from_path(path)
             file_name = os.path.basename(path)
-            
+
+            if llm_api_key and file_text.strip():
+                file_text = await enhance_text_with_llm(file_text, file_name, llm_api_key)
+
             parsed_documents.append({
                 "file_id": file_id,
                 "file_name": file_name,

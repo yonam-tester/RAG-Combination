@@ -30,6 +30,7 @@ public class FilePreprocessingService {
         this.fileRepository = fileRepository;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(3))
+                .version(HttpClient.Version.HTTP_1_1)
                 .build();
     }
 
