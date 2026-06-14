@@ -102,21 +102,6 @@ const EvidenceSection: React.FC<{ evidences: Evidence[] }> = ({ evidences }) => 
 
   return (
     <div className="space-y-3 pt-3 border-t border-white/5" onClick={e => e.stopPropagation()}>
-      {/* 출처 문서 목록 pill */}
-      <div className="flex flex-wrap gap-1.5">
-        {sourceNames.map(name => (
-          <span key={name} className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-mono">
-            <span className="material-symbols-outlined text-[10px]">description</span>
-            {name}
-          </span>
-        ))}
-        {lowConf.length > 0 && (
-          <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-700/30 text-slate-500 border border-slate-600/20 font-mono">
-            +{lowConf.length}건 저신뢰도
-          </span>
-        )}
-      </div>
-
       {/* 고신뢰도 근거 (문서별) */}
       <div className="space-y-2">
         {sourceNames.map(name => (
