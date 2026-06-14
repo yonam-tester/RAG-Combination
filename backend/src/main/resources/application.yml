@@ -46,5 +46,5 @@ ai:
     url: ${AI_SERVER_URL:http://localhost:8000}
 
 llm:
-  provider: ${LLM_PROVIDER:mock}
+  provider: ${LLM_PROVIDER:openai}
   direct: ${LLM_DIRECT:false}
