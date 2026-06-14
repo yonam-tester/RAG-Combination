@@ -1,0 +1,35 @@
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/*.pyo
+rag_server/venv/
+llm_server/venv/
+
+# Java / Maven
+backend/target/
+
+# Node.js
+frontend/node_modules/
+
+# Build output
+frontend/dist/
+frontend/build/
+
+# Environment variables
+**/.env
+**/.env.*
+
+# Data & generated files
+backend/data/
+rag_server/temp/
+rag_server/embedded/
+rag_server/rag_chunks.jsonl
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
