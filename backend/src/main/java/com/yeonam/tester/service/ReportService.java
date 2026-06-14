@@ -107,7 +107,9 @@ public class ReportService {
         if (targetCount > 0 && targetCount > existingTcs.size()) {
             int needed = targetCount - existingTcs.size();
             List<String> existingNames = existingTcs.stream()
-                    .map(TestCase::getTestCaseName)
+                    .map(tc -> String.format("%s [%s]",
+                        tc.getTestCaseName(),
+                        tc.getTechnique() != null ? tc.getTechnique() : "일반"))
                     .collect(Collectors.toList());
             try {
                 String llmResponse = llmClient.generateSupplementaryScenarios(
@@ -122,8 +124,12 @@ public class ReportService {
                     Map<String, Object> m = new HashMap<>();
                     m.put("testCaseName", s.getTestCaseName());
                     m.put("testScenario", s.getTestScenario());
+                    m.put("precondition", s.getPrecondition());
+                    m.put("testSteps", s.getTestSteps());
                     m.put("expectedResult", s.getExpectedResult());
                     m.put("priority", s.getPriority() != null ? s.getPriority() : "MEDIUM");
+                    m.put("technique", s.getTechnique());
+                    m.put("riskTags", s.getRiskTags());
                     additionalScenarioMaps.add(m);
                 }
             } catch (Exception e) {

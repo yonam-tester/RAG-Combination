@@ -55,18 +55,42 @@ public class MockLlmClient implements LlmClient {
                 """;
     }
 
+    private static final String[] MOCK_SUPPLEMENTARY = {
+        "{\"testCaseName\":\"동시 다중 요청 처리 시 데이터 정합성 검증\"," +
+        "\"testScenario\":\"동일 리소스에 동시에 여러 요청이 도달할 때 경쟁 조건(Race Condition) 없이 데이터가 일관되게 처리되는지 확인한다.\"," +
+        "\"precondition\":\"동시성 부하를 발생시킬 수 있는 클라이언트 도구(JMeter 또는 k6)가 준비되어 있고, 테스트 데이터가 DB에 초기화되어 있어야 한다.\"," +
+        "\"testSteps\":\"1. 동일 리소스에 대한 10개의 병렬 요청을 동시에 전송한다.\\n2. 각 요청의 응답 상태 코드를 수집한다.\\n3. 데이터베이스에서 최종 저장된 데이터를 조회하고 일관성을 검증한다.\"," +
+        "\"expectedResult\":\"모든 요청이 적절히 처리되거나 충돌 시 명확한 오류 응답이 반환되며, 최종 데이터 상태가 정합성을 유지한다.\"," +
+        "\"priority\":\"HIGH\"," +
+        "\"technique\":\"State Transition Testing\"," +
+        "\"riskTags\":[\"동시성_오류\",\"데이터유효성\",\"서버오류\"]}",
+
+        "{\"testCaseName\":\"토큰 만료 후 API 접근 차단 검증\"," +
+        "\"testScenario\":\"인증 토큰의 유효 기간이 만료된 이후에도 API 요청이 허용되지 않고 401 응답이 반환되는지 검증한다.\"," +
+        "\"precondition\":\"만료된 JWT 토큰을 직접 생성하거나 시간 조작이 가능한 테스트 환경이 준비되어 있어야 한다.\"," +
+        "\"testSteps\":\"1. 만료 시간이 지난 JWT 토큰을 준비한다.\\n2. 해당 토큰으로 보호된 API 엔드포인트에 요청을 전송한다.\\n3. 응답 상태 코드와 오류 메시지를 확인한다.\"," +
+        "\"expectedResult\":\"HTTP 401 Unauthorized 응답이 반환되고, 만료된 토큰으로는 어떠한 보호 리소스에도 접근할 수 없다.\"," +
+        "\"priority\":\"HIGH\"," +
+        "\"technique\":\"Security Testing\"," +
+        "\"riskTags\":[\"인증\",\"CREDENTIAL_EXPOSURE\",\"권한검증\"]}",
+
+        "{\"testCaseName\":\"입력 필드 최대 길이 초과 시 오류 반환 검증\"," +
+        "\"testScenario\":\"허용된 최대 문자 수를 초과하는 입력값을 전송했을 때 서버가 적절히 거부하고 오류 메시지를 반환하는지 확인한다.\"," +
+        "\"precondition\":\"API 클라이언트(Postman 또는 curl) 및 각 필드의 최대 허용 길이 명세가 준비되어 있어야 한다.\"," +
+        "\"testSteps\":\"1. 최대 허용 길이보다 1자 초과하는 문자열을 생성한다.\\n2. 해당 값을 입력 필드에 포함하여 API 요청을 전송한다.\\n3. 응답 코드와 오류 메시지를 확인한다.\"," +
+        "\"expectedResult\":\"HTTP 400 Bad Request와 함께 최대 길이 초과를 알리는 유효성 검사 오류 메시지가 반환된다.\"," +
+        "\"priority\":\"MEDIUM\"," +
+        "\"technique\":\"Boundary Value Analysis\"," +
+        "\"riskTags\":[\"입력검증\",\"유효성검사\",\"오류처리\"]}"
+    };
+
     @Override
     public String generateSupplementaryScenarios(String summary, String qaPerspective, List<String> existingNames, int count) {
+        int available = MOCK_SUPPLEMENTARY.length;
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < count; i++) {
             if (i > 0) sb.append(",");
-            int num = i + 1;
-            sb.append("{")
-              .append("\"testCaseName\":\"보완 시나리오 ").append(num).append("\",")
-              .append("\"testScenario\":\"보완 시나리오 ").append(num).append("에 대한 검증 시나리오\",")
-              .append("\"expectedResult\":\"보완 시나리오 ").append(num).append("의 기대 결과\",")
-              .append("\"priority\":\"MEDIUM\"")
-              .append("}");
+            sb.append(MOCK_SUPPLEMENTARY[i % available]);
         }
         sb.append("]");
         return sb.toString();

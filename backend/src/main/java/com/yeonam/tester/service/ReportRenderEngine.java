@@ -65,6 +65,7 @@ public class ReportRenderEngine {
         Set<String> tags = new HashSet<>();
         for (Object r : risks) {
             String tag = (r instanceof RiskItem) ? ((RiskItem) r).getRiskType() : r.toString();
+            if (tag.startsWith("#")) tag = tag.substring(1);
             tags.add(tag);
         }
 
@@ -226,12 +227,51 @@ public class ReportRenderEngine {
                 Map<String, Object> s = additionalScenarios.get(i);
                 sb.append("### 보완-").append(baseIndex + i).append(": ")
                   .append(s.getOrDefault("testCaseName", "보완 시나리오")).append("\n");
-                sb.append("- **우선순위**: `")
-                  .append(s.getOrDefault("priority", "MEDIUM")).append("`\n");
-                sb.append("- **테스트 시나리오**: ")
-                  .append(s.getOrDefault("testScenario", "")).append("\n");
-                sb.append("- **기대 결과**: ")
-                  .append(s.getOrDefault("expectedResult", "")).append("\n");
+
+                // 우선순위 + 기법
+                String technique = (String) s.get("technique");
+                sb.append("- **우선순위**: `").append(s.getOrDefault("priority", "MEDIUM")).append("`");
+                if (technique != null && !technique.isBlank()) {
+                    sb.append(" | **기법**: ").append(technique);
+                }
+                sb.append("\n");
+
+                // 시나리오
+                sb.append("- **테스트 시나리오**: ").append(s.getOrDefault("testScenario", "")).append("\n");
+
+                // 사전 조건
+                String precondition = (String) s.get("precondition");
+                if (precondition != null && !precondition.isBlank()) {
+                    sb.append("- **사전 조건**: ").append(precondition).append("\n");
+                }
+
+                // 절차 (testSteps 문자열을 번호 목록으로 정규화)
+                Object stepsObj = s.get("testSteps");
+                if (stepsObj != null && !stepsObj.toString().isBlank()) {
+                    sb.append("- **테스트 절차**:\n");
+                    String[] lines = stepsObj.toString().split("\n");
+                    int stepNum = 1;
+                    for (String line : lines) {
+                        if (!line.trim().isEmpty()) {
+                            String cleaned = line.replaceAll("^\\d+\\.\\s*", "").replaceAll("^[-*]\\s*", "").trim();
+                            sb.append("  ").append(stepNum++).append(". ").append(cleaned).append("\n");
+                        }
+                    }
+                }
+
+                // 기대 결과
+                sb.append("- **기대 결과**: ").append(s.getOrDefault("expectedResult", "")).append("\n");
+
+                // 위험 요인 (riskTags → 한국어 문장)
+                List<?> riskTags = (List<?>) s.get("riskTags");
+                List<String> riskSentences = buildRiskSentences(riskTags);
+                if (!riskSentences.isEmpty()) {
+                    sb.append("- **위험 요인**:\n");
+                    for (String sentence : riskSentences) {
+                        sb.append("  - ").append(sentence).append("\n");
+                    }
+                }
+
                 sb.append("\n");
             }
         }
