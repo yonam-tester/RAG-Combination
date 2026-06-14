@@ -135,25 +135,28 @@ public class BedrockLlmClient implements LlmClient {
                 ? "(없음)"
                 : existingNames.stream().map(n -> "- " + n).collect(java.util.stream.Collectors.joining("\n"));
 
-            String systemPrompt = "당신은 QA 아키텍트입니다. 출력은 반드시 마크다운 없는 순수 JSON 배열이어야 합니다.";
+            String systemPrompt = """
+                    당신은 소프트웨어 QA 아키텍트입니다. 기존 테스트 케이스의 검증 사각지대를 보완하는
+                    추가 테스트 시나리오를 설계합니다.
+                    출력은 반드시 마크다운 없는 순수 JSON 배열만 반환하십시오.
+                    """;
             String userPrompt = String.format("""
-                아래 기존 테스트 케이스와 중복되지 않는 새로운 테스트 케이스를 %d개 생성하세요.
+                    [분석 요약]
+                    %s
 
-                [기존 테스트 케이스 이름 목록]
-                %s
+                    [QA 검증 관점]
+                    %s
 
-                [QA 관점]
-                %s
+                    [기존 TC 목록] (아래 항목과 중복되지 않게 생성하세요)
+                    %s
 
-                [분석 요약]
-                %s
-
-                반드시 %d개만 생성하고, 다음 형식의 순수 JSON 배열로만 반환하세요:
-                [{"testCaseName":"...","testScenario":"...","expectedResult":"...","priority":"HIGH|MEDIUM|LOW"}]
-                """, count, existingNamesStr,
-                    qaPerspective != null ? qaPerspective : "",
-                    summary != null ? summary : "",
-                    count);
+                    반드시 %d개만 생성하세요. 형식:
+                    [{"testCaseName":"...","testScenario":"...","expectedResult":"...","priority":"HIGH|MEDIUM|LOW"}]
+                    """,
+                summary != null ? summary : "",
+                qaPerspective != null ? qaPerspective : "",
+                existingNamesStr,
+                count);
 
             ObjectNode rootNode = objectMapper.createObjectNode();
             rootNode.put("anthropic_version", "bedrock-2023-05-31");
