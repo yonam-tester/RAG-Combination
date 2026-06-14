@@ -21,6 +21,57 @@ public class ReportRenderEngine {
 
     private static final String DISCLAIMER_TEXT = "본 시스템은 테스트 수행 결과를 보장하거나 최종 판단을 대체하지 않으며, QA 담당자의 검토를 전제로 합니다.";
 
+    private static final Map<java.util.Set<String>, String> RISK_SENTENCE_MAP;
+
+    static {
+        RISK_SENTENCE_MAP = new java.util.LinkedHashMap<>();
+        RISK_SENTENCE_MAP.put(new java.util.HashSet<>(java.util.Arrays.asList(
+            "권한_부여", "권한검증", "관리자", "AUTHORIZATION_BYPASS", "PRIVILEGE_ESCALATION"
+        )), "접근 권한이 없는 사용자의 요청이 차단되는지 검증이 필요합니다.");
+        RISK_SENTENCE_MAP.put(new java.util.HashSet<>(java.util.Arrays.asList(
+            "입력검증", "유효성검사", "입력오류", "데이터유효성"
+        )), "잘못된 입력값에 대해 서버가 적절히 거부하는지 확인이 필요합니다.");
+        RISK_SENTENCE_MAP.put(new java.util.HashSet<>(java.util.Arrays.asList(
+            "오류처리", "예외처리", "서버오류", "오류"
+        )), "예외 상황 발생 시 적절한 오류 응답이 반환되어야 합니다.");
+        RISK_SENTENCE_MAP.put(new java.util.HashSet<>(java.util.Arrays.asList(
+            "로그인", "전화번호", "인증"
+        )), "인증 정보의 정확성과 보안 처리 여부를 확인해야 합니다.");
+        RISK_SENTENCE_MAP.put(new java.util.HashSet<>(java.util.Arrays.asList(
+            "출석", "위치검증", "GPS", "위치오류"
+        )), "위치 데이터의 정확성과 출석 처리 로직의 신뢰성을 검증해야 합니다.");
+        RISK_SENTENCE_MAP.put(new java.util.HashSet<>(java.util.Arrays.asList(
+            "엑셀업로드", "파일다운로드"
+        )), "파일 입출력 처리 중 데이터 손실이나 오류가 없는지 확인이 필요합니다.");
+        RISK_SENTENCE_MAP.put(new java.util.HashSet<>(java.util.Arrays.asList(
+            "TEST_COUPLING", "TEST_STATE_POLLUTION"
+        )), "테스트 간 상태 공유로 인한 결과 오염 가능성이 있습니다.");
+        RISK_SENTENCE_MAP.put(new java.util.HashSet<>(java.util.Arrays.asList(
+            "CREDENTIAL_EXPOSURE"
+        )), "민감 정보(비밀번호, 토큰)가 코드나 로그에 노출될 위험이 있습니다.");
+    }
+
+    private List<String> buildRiskSentences(List<?> risks) {
+        if (risks == null || risks.isEmpty()) return Collections.emptyList();
+
+        java.util.Set<String> tags = new java.util.HashSet<>();
+        for (Object r : risks) {
+            String tag = (r instanceof com.yeonam.tester.domain.RiskItem) ? ((com.yeonam.tester.domain.RiskItem) r).getRiskType() : r.toString();
+            tags.add(tag);
+        }
+
+        java.util.Set<String> added = new java.util.LinkedHashSet<>();
+        for (Map.Entry<java.util.Set<String>, String> entry : RISK_SENTENCE_MAP.entrySet()) {
+            for (String tag : tags) {
+                if (entry.getKey().contains(tag)) {
+                    added.add(entry.getValue());
+                    break;
+                }
+            }
+        }
+        return new java.util.ArrayList<>(added);
+    }
+
     /**
      * Renders a structured Markdown report from the assembled model.
      */
@@ -110,14 +161,12 @@ public class ReportRenderEngine {
 
                 // Risks
                 List<?> risks = (List<?>) tc.get("risks");
-                if (risks != null && !risks.isEmpty()) {
-                    sb.append("- **위험 요소 태그**: ");
-                    for (int i = 0; i < risks.size(); i++) {
-                        Object r = risks.get(i);
-                        String rType = (r instanceof com.yeonam.tester.domain.RiskItem) ? ((com.yeonam.tester.domain.RiskItem) r).getRiskType() : r.toString();
-                        sb.append("#").append(rType).append(" ");
+                List<String> riskSentences = buildRiskSentences(risks);
+                if (!riskSentences.isEmpty()) {
+                    sb.append("- **위험 요인**:\n");
+                    for (String sentence : riskSentences) {
+                        sb.append("  - ").append(sentence).append("\n");
                     }
-                    sb.append("\n");
                 }
 
                 // Evidences (RAG)
