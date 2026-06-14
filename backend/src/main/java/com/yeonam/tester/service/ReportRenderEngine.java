@@ -8,45 +8,53 @@ import com.lowagie.text.pdf.PdfWriter;
 import com.yeonam.tester.domain.Project;
 import com.yeonam.tester.domain.AnalysisJob;
 import com.yeonam.tester.domain.Requirement;
+import com.yeonam.tester.domain.Evidence;
+import com.yeonam.tester.domain.RiskItem;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class ReportRenderEngine {
 
     private static final String DISCLAIMER_TEXT = "본 시스템은 테스트 수행 결과를 보장하거나 최종 판단을 대체하지 않으며, QA 담당자의 검토를 전제로 합니다.";
 
-    private static final Map<java.util.Set<String>, String> RISK_SENTENCE_MAP;
+    private static final Map<Set<String>, String> RISK_SENTENCE_MAP;
 
     static {
-        RISK_SENTENCE_MAP = new java.util.LinkedHashMap<>();
-        RISK_SENTENCE_MAP.put(new java.util.HashSet<>(java.util.Arrays.asList(
+        RISK_SENTENCE_MAP = new LinkedHashMap<>();
+        RISK_SENTENCE_MAP.put(new HashSet<>(Arrays.asList(
             "권한_부여", "권한검증", "관리자", "AUTHORIZATION_BYPASS", "PRIVILEGE_ESCALATION"
         )), "접근 권한이 없는 사용자의 요청이 차단되는지 검증이 필요합니다.");
-        RISK_SENTENCE_MAP.put(new java.util.HashSet<>(java.util.Arrays.asList(
+        RISK_SENTENCE_MAP.put(new HashSet<>(Arrays.asList(
             "입력검증", "유효성검사", "입력오류", "데이터유효성"
         )), "잘못된 입력값에 대해 서버가 적절히 거부하는지 확인이 필요합니다.");
-        RISK_SENTENCE_MAP.put(new java.util.HashSet<>(java.util.Arrays.asList(
+        RISK_SENTENCE_MAP.put(new HashSet<>(Arrays.asList(
             "오류처리", "예외처리", "서버오류", "오류"
         )), "예외 상황 발생 시 적절한 오류 응답이 반환되어야 합니다.");
-        RISK_SENTENCE_MAP.put(new java.util.HashSet<>(java.util.Arrays.asList(
+        RISK_SENTENCE_MAP.put(new HashSet<>(Arrays.asList(
             "로그인", "전화번호", "인증"
         )), "인증 정보의 정확성과 보안 처리 여부를 확인해야 합니다.");
-        RISK_SENTENCE_MAP.put(new java.util.HashSet<>(java.util.Arrays.asList(
+        RISK_SENTENCE_MAP.put(new HashSet<>(Arrays.asList(
             "출석", "위치검증", "GPS", "위치오류"
         )), "위치 데이터의 정확성과 출석 처리 로직의 신뢰성을 검증해야 합니다.");
-        RISK_SENTENCE_MAP.put(new java.util.HashSet<>(java.util.Arrays.asList(
+        RISK_SENTENCE_MAP.put(new HashSet<>(Arrays.asList(
             "엑셀업로드", "파일다운로드"
         )), "파일 입출력 처리 중 데이터 손실이나 오류가 없는지 확인이 필요합니다.");
-        RISK_SENTENCE_MAP.put(new java.util.HashSet<>(java.util.Arrays.asList(
+        RISK_SENTENCE_MAP.put(new HashSet<>(Arrays.asList(
             "TEST_COUPLING", "TEST_STATE_POLLUTION"
         )), "테스트 간 상태 공유로 인한 결과 오염 가능성이 있습니다.");
-        RISK_SENTENCE_MAP.put(new java.util.HashSet<>(java.util.Arrays.asList(
+        RISK_SENTENCE_MAP.put(new HashSet<>(Arrays.asList(
             "CREDENTIAL_EXPOSURE"
         )), "민감 정보(비밀번호, 토큰)가 코드나 로그에 노출될 위험이 있습니다.");
     }
@@ -54,14 +62,14 @@ public class ReportRenderEngine {
     private List<String> buildRiskSentences(List<?> risks) {
         if (risks == null || risks.isEmpty()) return Collections.emptyList();
 
-        java.util.Set<String> tags = new java.util.HashSet<>();
+        Set<String> tags = new HashSet<>();
         for (Object r : risks) {
-            String tag = (r instanceof com.yeonam.tester.domain.RiskItem) ? ((com.yeonam.tester.domain.RiskItem) r).getRiskType() : r.toString();
+            String tag = (r instanceof RiskItem) ? ((RiskItem) r).getRiskType() : r.toString();
             tags.add(tag);
         }
 
-        java.util.Set<String> added = new java.util.LinkedHashSet<>();
-        for (Map.Entry<java.util.Set<String>, String> entry : RISK_SENTENCE_MAP.entrySet()) {
+        LinkedHashSet<String> added = new LinkedHashSet<>();
+        for (Map.Entry<Set<String>, String> entry : RISK_SENTENCE_MAP.entrySet()) {
             for (String tag : tags) {
                 if (entry.getKey().contains(tag)) {
                     added.add(entry.getValue());
@@ -69,7 +77,7 @@ public class ReportRenderEngine {
                 }
             }
         }
-        return new java.util.ArrayList<>(added);
+        return new ArrayList<>(added);
     }
 
     /**
@@ -174,8 +182,8 @@ public class ReportRenderEngine {
                 if (evidences != null && !evidences.isEmpty()) {
                     sb.append("- **매핑된 RAG 근거 문서 조각**:\n");
                     for (Object evObj : evidences) {
-                        if (evObj instanceof com.yeonam.tester.domain.Evidence) {
-                            com.yeonam.tester.domain.Evidence ev = (com.yeonam.tester.domain.Evidence) evObj;
+                        if (evObj instanceof Evidence) {
+                            Evidence ev = (Evidence) evObj;
                             sb.append("  > [**").append(ev.getSourceName()).append("** (").append(ev.getSourceSection() != null ? ev.getSourceSection() : "전체").append(")] ")
                                     .append(ev.getEvidenceText()).append("\n");
                         }
