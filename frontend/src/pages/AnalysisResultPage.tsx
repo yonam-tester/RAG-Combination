@@ -687,6 +687,7 @@ export const AnalysisResultPage: React.FC = () => {
               alert('보고서에 수록할 테스트 케이스를 최소 1개 이상 선택해 주세요.');
               return;
             }
+            setTargetScenarioCount(Math.min(testCases.length, 10));
             setIsReportModalOpen(true);
           }}
           className="px-xl py-4 rounded-xl bg-gradient-to-r from-[#6366F1] to-[#8B5CF6] text-white font-bold text-sm glow-indigo hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2"
@@ -750,26 +751,28 @@ export const AnalysisResultPage: React.FC = () => {
             </div>
 
             {/* 시나리오 수 선택 */}
-            <div className="mb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="material-symbols-outlined text-indigo-400">format_list_numbered</span>
-                <span className="text-sm font-semibold text-gray-300">시나리오 수 선택 (최대 10개)</span>
+            {testCases.length < 10 && (
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-indigo-400">format_list_numbered</span>
+                  <span className="text-sm font-semibold text-gray-300">시나리오 수 선택 (최대 10개)</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={Math.min(testCases.length > 0 ? testCases.length : 1, 10)}
+                    max={10}
+                    value={targetScenarioCount}
+                    onChange={(e) => setTargetScenarioCount(Number(e.target.value))}
+                    className="flex-1 accent-indigo-500"
+                  />
+                  <span className="text-indigo-300 font-bold w-8 text-center">{targetScenarioCount}</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  현재 분석된 테스트 케이스 {testCases.length}개 + 보완 시나리오 {Math.max(0, targetScenarioCount - testCases.length)}개
+                </p>
               </div>
-              <div className="flex items-center gap-3">
-                <input
-                  type="range"
-                  min={testCases.length > 0 ? testCases.length : 1}
-                  max={10}
-                  value={targetScenarioCount}
-                  onChange={(e) => setTargetScenarioCount(Number(e.target.value))}
-                  className="flex-1 accent-indigo-500"
-                />
-                <span className="text-indigo-300 font-bold w-8 text-center">{targetScenarioCount}</span>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                현재 분석된 테스트 케이스 {testCases.length}개 + 보완 시나리오 {Math.max(0, targetScenarioCount - testCases.length)}개
-              </p>
-            </div>
+            )}
 
             <div className="flex justify-end gap-3 pt-2">
               <button
