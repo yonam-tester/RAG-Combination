@@ -145,17 +145,16 @@ public class ReportRenderEngine {
         }
         sb.append("- **분석 생성일**: ").append(LocalDateTimeFormatter(job)).append("\n\n");
 
-        // 2. Requirements & Perspectives
-        sb.append("## 2. 요구사항 및 분석 관점\n");
+        // 2. QA 분석 요약
+        sb.append("## 2. QA 분석 요약\n\n");
         sb.append("- **QA 관점**: ").append(job.getQaPerspective() != null ? job.getQaPerspective() : "기본 관점").append("\n");
         if (job.getCustomPrompt() != null && !job.getCustomPrompt().isBlank()) {
-            sb.append("- **사용자 맞춤 프롬프트**: ").append(job.getCustomPrompt()).append("\n");
+            sb.append("- **맞춤 분석 지침**: ").append(job.getCustomPrompt()).append("\n");
         }
-        sb.append("\n### 2.1 요구사항 명세 요약\n");
-        sb.append(job.getSummary() != null ? job.getSummary() : "추출된 요구사항 요약 정보가 없습니다.").append("\n\n");
+        sb.append("- **분석 결과**: ").append(job.getSummary() != null ? job.getSummary() : "요약 정보가 없습니다.").append("\n\n");
 
         // 3. Test Cases
-        sb.append("## 3. 테스트 케이스 생성 결과\n\n");
+        sb.append("## 3. 테스트 케이스 목록\n\n");
         if (testCases.isEmpty()) {
             sb.append("생성된 테스트 케이스 시나리오가 없습니다.\n\n");
         } else {
@@ -173,20 +172,23 @@ public class ReportRenderEngine {
                 Object stepsObj = tc.get("testSteps");
                 if (stepsObj instanceof List) {
                     List<String> steps = (List<String>) stepsObj;
+                    int stepNum = 1;
                     for (String step : steps) {
-                        sb.append("  - ").append(step).append("\n");
+                        String cleaned = step.replaceAll("^\\d+\\.\\s*", "").replaceAll("^[-*]\\s*", "").trim();
+                        sb.append("  ").append(stepNum++).append(". ").append(cleaned).append("\n");
                     }
                 } else if (stepsObj instanceof String) {
                     String stepsStr = (String) stepsObj;
-                    // Check if it's formatted as lines
                     String[] lines = stepsStr.split("\n");
+                    int stepNum = 1;
                     for (String line : lines) {
                         if (!line.trim().isEmpty()) {
-                            sb.append("  - ").append(line.replace("- ", "").replace("* ", "").trim()).append("\n");
+                            String cleaned = line.replaceAll("^\\d+\\.\\s*", "").replaceAll("^[-*]\\s*", "").trim();
+                            sb.append("  ").append(stepNum++).append(". ").append(cleaned).append("\n");
                         }
                     }
                 } else {
-                    sb.append("  - 절차가 등록되지 않았습니다.\n");
+                    sb.append("  1. 절차가 등록되지 않았습니다.\n");
                 }
 
                 sb.append("- **기대 결과**: ").append(tc.get("expectedResult")).append("\n");

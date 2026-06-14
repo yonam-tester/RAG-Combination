@@ -261,4 +261,58 @@ class ReportRenderEngineTests {
         int last = output.lastIndexOf(label);
         assertEquals(first, last, "동일 소스가 중복 출력되면 안 됩니다");
     }
+
+    // --- Task 4: TC 절차 번호 + 전체 구조 ---
+
+    @Test
+    void renderMarkdown_testStepsUseNumberedList() {
+        Map<String, Object> tcMap = new HashMap<>();
+        tcMap.put("testCaseId", "TC-S01");
+        tcMap.put("testCaseName", "절차 번호 테스트");
+        tcMap.put("priority", "HIGH");
+        tcMap.put("confidenceLevel", "HIGH");
+        tcMap.put("requirementId", "REQ-S01");
+        tcMap.put("requirementText", "요구사항");
+        tcMap.put("testScenario", "시나리오");
+        tcMap.put("precondition", "로그인 상태");
+        tcMap.put("testSteps", List.of("1. 첫 번째 단계", "2. 두 번째 단계", "3. 세 번째 단계"));
+        tcMap.put("expectedResult", "성공");
+        tcMap.put("risks", Collections.emptyList());
+        tcMap.put("evidences", Collections.emptyList());
+
+        baseModel.put("testCases", List.of(tcMap));
+        String output = engine.renderMarkdown(baseModel);
+
+        // "  1. 첫 번째 단계" 형식이어야 함 (2칸 들여쓰기 + 번호)
+        assertTrue(output.contains("  1. 첫 번째 단계"), "절차가 번호 목록 형식이어야 합니다");
+        assertTrue(output.contains("  2. 두 번째 단계"), "두 번째 절차가 번호 목록 형식이어야 합니다");
+        // "  - 1. ..." 형식이 아니어야 함
+        assertFalse(output.contains("  - 1."), "잘못된 들여쓰기 형식(- 1.)이 남아 있습니다");
+    }
+
+    @Test
+    void renderMarkdown_section2ContainsSummaryNotSrsDump() {
+        String output = engine.renderMarkdown(baseModel);
+
+        assertTrue(output.contains("## 2. QA 분석 요약"), "Section 2 헤더가 없습니다");
+        assertTrue(output.contains("RAG 기반 분석 완료"), "요약 텍스트가 없습니다");
+        assertFalse(output.contains("## 소프트웨어 요구사항 명세서"),
+                "Section 2에 SRS 전문이 포함되면 안 됩니다");
+    }
+
+    @Test
+    void renderMarkdown_sectionOrderIsCorrect() {
+        String output = engine.renderMarkdown(baseModel);
+
+        int idx0 = output.indexOf("## 0. 이 보고서를 읽는 방법");
+        int idx1 = output.indexOf("## 1. 분석 대상 개요");
+        int idx2 = output.indexOf("## 2. QA 분석 요약");
+        int idx3 = output.indexOf("## 3. 테스트 케이스 목록");
+        int idxA = output.indexOf("## Appendix.");
+
+        assertTrue(idx0 < idx1, "Section 0이 1보다 앞에 있어야 합니다");
+        assertTrue(idx1 < idx2, "Section 1이 2보다 앞에 있어야 합니다");
+        assertTrue(idx2 < idx3, "Section 2가 3보다 앞에 있어야 합니다");
+        assertTrue(idx3 < idxA, "Section 3이 Appendix보다 앞에 있어야 합니다");
+    }
 }
