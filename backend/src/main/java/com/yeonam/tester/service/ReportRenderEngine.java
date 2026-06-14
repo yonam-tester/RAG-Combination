@@ -80,6 +80,30 @@ public class ReportRenderEngine {
         return new ArrayList<>(added);
     }
 
+    private String formatSourceLabel(String sourceName) {
+        if (sourceName == null) return "알 수 없는 출처";
+        if (sourceName.endsWith("_SRS.md") || sourceName.contains("SRS")) return "소프트웨어 요구사항 명세서";
+        if (sourceName.endsWith("_SDD.md") || sourceName.contains("SDD")) return "소프트웨어 설계 문서";
+        if (sourceName.startsWith("owasp_")) return "보안 검증 가이드 (OWASP)";
+        if (sourceName.startsWith("istqb_")) return "테스트 기법 가이드 (ISTQB)";
+        if (sourceName.startsWith("cypress_")) return "E2E 테스트 모범 사례 (Cypress)";
+        if (sourceName.startsWith("playwright_")) return "E2E 테스트 기법 (Playwright)";
+        if (sourceName.startsWith("nist_")) return "테스트 프로세스 가이드 (NIST/SAMATE)";
+        return sourceName;
+    }
+
+    private List<String> deduplicateSources(List<?> evidences) {
+        if (evidences == null || evidences.isEmpty()) return Collections.emptyList();
+        Set<String> seen = new LinkedHashSet<>();
+        for (Object evObj : evidences) {
+            if (evObj instanceof Evidence) {
+                String label = formatSourceLabel(((Evidence) evObj).getSourceName());
+                seen.add(label);
+            }
+        }
+        return new ArrayList<>(seen);
+    }
+
     /**
      * Renders a structured Markdown report from the assembled model.
      */
@@ -179,14 +203,11 @@ public class ReportRenderEngine {
 
                 // Evidences (RAG)
                 List<?> evidences = (List<?>) tc.get("evidences");
-                if (evidences != null && !evidences.isEmpty()) {
-                    sb.append("- **매핑된 RAG 근거 문서 조각**:\n");
-                    for (Object evObj : evidences) {
-                        if (evObj instanceof Evidence) {
-                            Evidence ev = (Evidence) evObj;
-                            sb.append("  > [**").append(ev.getSourceName()).append("** (").append(ev.getSourceSection() != null ? ev.getSourceSection() : "전체").append(")] ")
-                                    .append(ev.getEvidenceText()).append("\n");
-                        }
+                List<String> sourceLabels = deduplicateSources(evidences);
+                if (!sourceLabels.isEmpty()) {
+                    sb.append("- **근거 출처**:\n");
+                    for (String label : sourceLabels) {
+                        sb.append("  - ").append(label).append("\n");
                     }
                 }
                 sb.append("\n");

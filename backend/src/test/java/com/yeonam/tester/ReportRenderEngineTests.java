@@ -171,4 +171,94 @@ class ReportRenderEngineTests {
         int lastIdx = output.lastIndexOf(sentence);
         assertEquals(firstIdx, lastIdx, "동일한 위험 문장이 중복 출력됩니다");
     }
+
+    // --- Task 3: Evidence 소스 레이블 + 중복 제거 ---
+
+    private Map<String, Object> makeTcMapWithEvidences(List<com.yeonam.tester.domain.Evidence> evidences) {
+        Map<String, Object> tcMap = new HashMap<>();
+        tcMap.put("testCaseId", "TC-E01");
+        tcMap.put("testCaseName", "Evidence 테스트");
+        tcMap.put("priority", "HIGH");
+        tcMap.put("confidenceLevel", "HIGH");
+        tcMap.put("requirementId", "REQ-E01");
+        tcMap.put("requirementText", "요구사항");
+        tcMap.put("testScenario", "시나리오");
+        tcMap.put("precondition", "");
+        tcMap.put("testSteps", List.of("1. 단계"));
+        tcMap.put("expectedResult", "결과");
+        tcMap.put("risks", Collections.emptyList());
+        tcMap.put("evidences", evidences);
+        return tcMap;
+    }
+
+    @Test
+    void renderMarkdown_evidenceTextNotIncluded() {
+        com.yeonam.tester.domain.Evidence ev = com.yeonam.tester.domain.Evidence.builder()
+                .evidenceId("EV-001")
+                .sourceName("DOC-18BD6CAB_SRS.md")
+                .sourceSection("## 소프트웨어 요구사항 명세서")
+                .evidenceText("이것은 절대 보고서에 출력되면 안 되는 원문 텍스트입니다.")
+                .score(0.9)
+                .build();
+
+        baseModel.put("testCases", List.of(makeTcMapWithEvidences(List.of(ev))));
+        String output = engine.renderMarkdown(baseModel);
+
+        assertFalse(output.contains("이것은 절대 보고서에 출력되면 안 되는 원문 텍스트입니다."),
+                "evidenceText 원문이 보고서에 출력되면 안 됩니다");
+    }
+
+    @Test
+    void renderMarkdown_srsSourceNameConvertsToLabel() {
+        com.yeonam.tester.domain.Evidence ev = com.yeonam.tester.domain.Evidence.builder()
+                .evidenceId("EV-002")
+                .sourceName("DOC-18BD6CAB_SRS.md")
+                .sourceSection("SRS")
+                .evidenceText("원문")
+                .score(0.9)
+                .build();
+
+        baseModel.put("testCases", List.of(makeTcMapWithEvidences(List.of(ev))));
+        String output = engine.renderMarkdown(baseModel);
+
+        assertTrue(output.contains("소프트웨어 요구사항 명세서"),
+                "SRS 파일명이 레이블로 변환되어야 합니다");
+        assertTrue(output.contains("**근거 출처**"),
+                "근거 출처 헤더가 없습니다");
+    }
+
+    @Test
+    void renderMarkdown_owaspSourceNameConvertsToLabel() {
+        com.yeonam.tester.domain.Evidence ev = com.yeonam.tester.domain.Evidence.builder()
+                .evidenceId("EV-003")
+                .sourceName("owasp_security_knowledge_cards.json")
+                .sourceSection("security")
+                .evidenceText("원문")
+                .score(0.8)
+                .build();
+
+        baseModel.put("testCases", List.of(makeTcMapWithEvidences(List.of(ev))));
+        String output = engine.renderMarkdown(baseModel);
+
+        assertTrue(output.contains("보안 검증 가이드 (OWASP)"),
+                "OWASP 파일명이 레이블로 변환되어야 합니다");
+    }
+
+    @Test
+    void renderMarkdown_duplicateSourceNamesDeduped() {
+        com.yeonam.tester.domain.Evidence ev1 = com.yeonam.tester.domain.Evidence.builder()
+                .evidenceId("EV-004").sourceName("DOC-18BD6CAB_SRS.md")
+                .sourceSection("SRS").evidenceText("원문1").score(0.9).build();
+        com.yeonam.tester.domain.Evidence ev2 = com.yeonam.tester.domain.Evidence.builder()
+                .evidenceId("EV-005").sourceName("DOC-18BD6CAB_SRS.md")
+                .sourceSection("SRS").evidenceText("원문2").score(0.8).build();
+
+        baseModel.put("testCases", List.of(makeTcMapWithEvidences(List.of(ev1, ev2))));
+        String output = engine.renderMarkdown(baseModel);
+
+        String label = "소프트웨어 요구사항 명세서";
+        int first = output.indexOf(label);
+        int last = output.lastIndexOf(label);
+        assertEquals(first, last, "동일 소스가 중복 출력되면 안 됩니다");
+    }
 }
