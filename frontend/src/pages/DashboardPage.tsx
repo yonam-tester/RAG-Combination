@@ -241,9 +241,17 @@ export const DashboardPage: React.FC = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + sizes[i];
   };
 
+  const latestAnalysis = analysisJobs.length > 0
+    ? [...analysisJobs].sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())[0]
+    : null;
+
+  const latestReport = reports.length > 0
+    ? [...reports].sort((a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime())[0]
+    : null;
+
   // Filtered reports list for query
-  const filteredReports = reports.filter(r => 
-    r.reportId.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  const filteredReports = reports.filter(r =>
+    r.reportId.toLowerCase().includes(searchQuery.toLowerCase()) ||
     r.analysisId.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -325,6 +333,41 @@ export const DashboardPage: React.FC = () => {
                     <span>branch: {project.githubBranch || 'none'}</span>
                   </div>
                 </div>
+
+                {project.projectId === selectedProjectId && (latestAnalysis || latestReport) && (
+                  <div className="mt-3 pt-3 border-t border-white/5 space-y-1.5">
+                    {latestAnalysis && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/analysis-demo?analysisId=${latestAnalysis.analysisId}`);
+                        }}
+                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-300 text-[11px] font-semibold transition-colors"
+                      >
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <span className="material-symbols-outlined text-sm shrink-0">biotech</span>
+                          <span className="truncate">최근 분석: {latestAnalysis.analysisId}</span>
+                        </span>
+                        <span className="material-symbols-outlined text-sm shrink-0">arrow_forward</span>
+                      </button>
+                    )}
+                    {latestReport && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/report-demo?reportId=${latestReport.reportId}`);
+                        }}
+                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-300 text-[11px] font-semibold transition-colors"
+                      >
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <span className="material-symbols-outlined text-sm shrink-0">description</span>
+                          <span className="truncate">최근 보고서: {latestReport.reportId}</span>
+                        </span>
+                        <span className="material-symbols-outlined text-sm shrink-0">arrow_forward</span>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
 

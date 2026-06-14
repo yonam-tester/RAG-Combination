@@ -331,7 +331,7 @@ const TestCaseCard: React.FC<{ testCase: TestCase; isSelected: boolean; onToggle
           <div className="text-label-caps text-outline text-[10px] font-mono text-slate-500 uppercase">PROCEDURE</div>
           <ol className="text-body-sm text-on-surface text-xs space-y-1 pl-4 list-decimal leading-relaxed">
             {testCase.testSteps.map((step, idx) => (
-              <li key={idx}>{step}</li>
+              <li key={idx}>{step.replace(/^\d+\.\s*/, '')}</li>
             ))}
           </ol>
         </div>

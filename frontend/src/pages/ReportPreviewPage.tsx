@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { reportApi, ReportPreviewResponse } from '../services/api';
 
 export const ReportPreviewPage: React.FC = () => {
@@ -165,6 +166,7 @@ export const ReportPreviewPage: React.FC = () => {
                   {/* Markdown content area */}
                   <article className="prose prose-invert max-w-none text-slate-300 leading-relaxed font-sans space-y-4">
                     <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
                       components={{
                         h1: ({ children }) => <h1 className="text-2xl font-bold text-white border-b border-white/10 pb-3 mb-6 font-sans">{children}</h1>,
                         h2: ({ children }) => <h2 className="text-lg font-semibold text-slate-200 mt-8 mb-4 border-l-2 border-indigo-500 pl-3 font-sans">{children}</h2>,
