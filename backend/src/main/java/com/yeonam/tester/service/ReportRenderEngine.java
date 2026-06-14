@@ -34,6 +34,22 @@ public class ReportRenderEngine {
         StringBuilder sb = new StringBuilder();
         sb.append("# 📌 연암 테스터 QA 검증 보고서\n\n");
 
+        // Section 0: Glossary
+        sb.append("## 0. 이 보고서를 읽는 방법\n\n");
+        sb.append("이 보고서는 AI가 프로젝트 요구사항 문서를 분석하여 자동 생성한 QA 검증 보고서입니다.\n");
+        sb.append("테스트 및 QA 경험이 없어도 아래 용어 설명을 참고하면 내용을 이해할 수 있습니다.\n\n");
+        sb.append("| 용어 | 설명 |\n");
+        sb.append("|------|------|\n");
+        sb.append("| 테스트 케이스 (TC) | 특정 기능이 올바르게 동작하는지 확인하기 위한 하나의 검증 시나리오 |\n");
+        sb.append("| 우선순위 | HIGH: 반드시 검증 / MEDIUM: 가능하면 검증 / LOW: 여유 시 검증 |\n");
+        sb.append("| 신뢰도 | AI가 이 테스트 케이스를 얼마나 확신하는지의 정도 (HIGH/MEDIUM/LOW) |\n");
+        sb.append("| 사전 조건 | 테스트를 시작하기 전에 반드시 갖춰야 할 환경이나 상태 |\n");
+        sb.append("| 테스트 절차 | 테스트를 수행하는 순서대로 나열한 단계별 행동 목록 |\n");
+        sb.append("| 기대 결과 | 테스트가 통과할 때 나타나야 하는 정상적인 결과 |\n");
+        sb.append("| 위험 요인 | 이 기능에서 발생할 수 있는 잠재적인 문제나 취약점 |\n");
+        sb.append("| 근거 출처 | AI가 이 테스트 케이스를 생성할 때 참고한 문서 |\n");
+        sb.append("| 보완 시나리오 | RAG 분석 외에 LLM이 추가로 제안한 테스트 시나리오 |\n\n");
+
         // 1. Project Overview
         sb.append("## 1. 분석 대상 개요\n");
         sb.append("- **프로젝트명**: ").append(project.getName()).append("\n");
