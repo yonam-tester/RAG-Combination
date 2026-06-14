@@ -36,6 +36,10 @@ done
 
 ```bash
 cd /Users/rinaeshin/IdeaProjects/RAG-Combination
+
+# Docker daemon이 미실행 중이면 Docker Desktop 먼저 기동
+docker ps > /dev/null 2>&1 || (open -a Docker && sleep 10)
+
 docker-compose up -d
 ```
 
