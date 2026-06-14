@@ -82,8 +82,8 @@ public class ReportRenderEngine {
 
     private String formatSourceLabel(String sourceName) {
         if (sourceName == null) return "알 수 없는 출처";
-        if (sourceName.endsWith("_SRS.md") || sourceName.contains("SRS")) return "소프트웨어 요구사항 명세서";
-        if (sourceName.endsWith("_SDD.md") || sourceName.contains("SDD")) return "소프트웨어 설계 문서";
+        if (sourceName.endsWith("_SRS.md")) return "소프트웨어 요구사항 명세서";
+        if (sourceName.endsWith("_SDD.md")) return "소프트웨어 설계 문서";
         if (sourceName.startsWith("owasp_")) return "보안 검증 가이드 (OWASP)";
         if (sourceName.startsWith("istqb_")) return "테스트 기법 가이드 (ISTQB)";
         if (sourceName.startsWith("cypress_")) return "E2E 테스트 모범 사례 (Cypress)";
