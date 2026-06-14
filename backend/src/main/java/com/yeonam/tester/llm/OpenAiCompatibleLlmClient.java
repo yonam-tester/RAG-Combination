@@ -133,6 +133,10 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             Map<String, Object> response = restTemplate.postForObject(
                 baseUrl + "/chat/completions", entity, Map.class);
 
+            if (response == null) {
+                throw new RuntimeException("OpenAI 호환 LLM 호출 실패: 응답이 null입니다 (HTTP 응답 본문 없음)");
+            }
+
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> choices = (List<Map<String, Object>>) response.get("choices");
             @SuppressWarnings("unchecked")
@@ -147,11 +151,17 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
 
     private String stripMarkdownCodeBlock(String text) {
         if (text.contains("```json")) {
-            text = text.substring(text.indexOf("```json") + 7);
-            text = text.substring(0, text.lastIndexOf("```"));
+            int start = text.indexOf("```json") + 7;
+            int end = text.lastIndexOf("```");
+            if (end > start) {
+                text = text.substring(start, end);
+            }
         } else if (text.contains("```")) {
-            text = text.substring(text.indexOf("```") + 3);
-            text = text.substring(0, text.lastIndexOf("```"));
+            int start = text.indexOf("```") + 3;
+            int end = text.lastIndexOf("```");
+            if (end > start) {
+                text = text.substring(start, end);
+            }
         }
         return text.strip();
     }
