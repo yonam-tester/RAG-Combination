@@ -10,6 +10,7 @@ backend/target/
 
 # Node.js
 frontend/node_modules/
+scripts/node_modules/
 
 # Build output
 frontend/dist/
