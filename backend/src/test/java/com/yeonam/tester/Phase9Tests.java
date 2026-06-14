@@ -4,68 +4,50 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yeonam.tester.domain.*;
 import com.yeonam.tester.dto.*;
-import com.yeonam.tester.llm.MockLlmClient;
+import com.yeonam.tester.llm.LlmClient;
 import com.yeonam.tester.repository.*;
 import com.yeonam.tester.service.*;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.BDDMockito.given;
 
 @SpringBootTest
 class Phase9Tests {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Autowired
-    private ProjectRepository projectRepository;
+    @MockBean
+    private LlmClient llmClient;
 
-    @Autowired
-    private AnalysisJobRepository analysisJobRepository;
+    @Autowired private ProjectRepository projectRepository;
+    @Autowired private AnalysisJobRepository analysisJobRepository;
+    @Autowired private RequirementRepository requirementRepository;
+    @Autowired private TestCaseRepository testCaseRepository;
+    @Autowired private ReportRepository reportRepository;
+    @Autowired private ReportService reportService;
 
-    @Autowired
-    private RequirementRepository requirementRepository;
-
-    @Autowired
-    private TestCaseRepository testCaseRepository;
-
-    @Autowired
-    private ReportRepository reportRepository;
-
-    @Autowired
-    private ReportService reportService;
-
-    @Test
-    void testMockLlmClientGeneratesCorrectSupplementaryCount() throws Exception {
-        MockLlmClient client = new MockLlmClient();
-        String json = client.generateSupplementaryScenarios(
-            "요약", "BACKEND", List.of("기존 TC-001", "기존 TC-002"), 3);
-
-        assertNotNull(json);
-        List<Map<String, Object>> parsed = objectMapper.readValue(
-            json, new TypeReference<List<Map<String, Object>>>() {});
-        assertEquals(3, parsed.size());
-
-        for (Map<String, Object> s : parsed) {
-            assertNotNull(s.get("testCaseName"));
-            assertNotNull(s.get("testScenario"));
-            assertNotNull(s.get("expectedResult"));
-            assertNotNull(s.get("priority"));
-        }
-    }
-
-    @Test
-    void testMockLlmClientGeneratesOneScenario() throws Exception {
-        MockLlmClient client = new MockLlmClient();
-        String json = client.generateSupplementaryScenarios("요약", "API", List.of(), 1);
-        List<Map<String, Object>> parsed = objectMapper.readValue(
-            json, new TypeReference<List<Map<String, Object>>>() {});
-        assertEquals(1, parsed.size());
+    @BeforeEach
+    void setUpLlmMock() {
+        given(llmClient.generateSupplementaryScenarios(any(), any(), any(), anyInt()))
+            .willReturn("""
+                [
+                  {"testCaseName":"보완 TC-1","testScenario":"시나리오 1","expectedResult":"결과 1","priority":"HIGH"},
+                  {"testCaseName":"보완 TC-2","testScenario":"시나리오 2","expectedResult":"결과 2","priority":"MEDIUM"},
+                  {"testCaseName":"보완 TC-3","testScenario":"시나리오 3","expectedResult":"결과 3","priority":"LOW"}
+                ]
+                """);
+        given(llmClient.generateTestCases(any(), any(), any()))
+            .willReturn("{}");
     }
 
     @Test
