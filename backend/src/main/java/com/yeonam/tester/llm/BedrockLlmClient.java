@@ -11,6 +11,7 @@ import software.amazon.awssdk.services.bedrockruntime.model.InvokeModelRequest;
 import software.amazon.awssdk.services.bedrockruntime.model.InvokeModelResponse;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 public class BedrockLlmClient implements LlmClient {
 
@@ -124,6 +125,75 @@ public class BedrockLlmClient implements LlmClient {
             return extractedText.strip();
         } catch (Exception e) {
             throw new RuntimeException("AWS Bedrock LLM 호출에 실패했습니다: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public String generateSupplementaryScenarios(String summary, String qaPerspective, List<String> existingNames, int count) {
+        try {
+            String existingNamesStr = (existingNames == null || existingNames.isEmpty())
+                ? "(없음)"
+                : existingNames.stream().map(n -> "- " + n).collect(java.util.stream.Collectors.joining("\n"));
+
+            String systemPrompt = "당신은 QA 아키텍트입니다. 출력은 반드시 마크다운 없는 순수 JSON 배열이어야 합니다.";
+            String userPrompt = String.format("""
+                아래 기존 테스트 케이스와 중복되지 않는 새로운 테스트 케이스를 %d개 생성하세요.
+
+                [기존 테스트 케이스 이름 목록]
+                %s
+
+                [QA 관점]
+                %s
+
+                [분석 요약]
+                %s
+
+                반드시 %d개만 생성하고, 다음 형식의 순수 JSON 배열로만 반환하세요:
+                [{"testCaseName":"...","testScenario":"...","expectedResult":"...","priority":"HIGH|MEDIUM|LOW"}]
+                """, count, existingNamesStr,
+                    qaPerspective != null ? qaPerspective : "",
+                    summary != null ? summary : "",
+                    count);
+
+            ObjectNode rootNode = objectMapper.createObjectNode();
+            rootNode.put("anthropic_version", "bedrock-2023-05-31");
+            rootNode.put("max_tokens", 2048);
+            rootNode.put("system", systemPrompt);
+
+            ArrayNode messagesArray = objectMapper.createArrayNode();
+            ObjectNode messageNode = objectMapper.createObjectNode();
+            messageNode.put("role", "user");
+            ArrayNode contentArray = objectMapper.createArrayNode();
+            ObjectNode textContentNode = objectMapper.createObjectNode();
+            textContentNode.put("type", "text");
+            textContentNode.put("text", userPrompt);
+            contentArray.add(textContentNode);
+            messageNode.set("content", contentArray);
+            messagesArray.add(messageNode);
+            rootNode.set("messages", messagesArray);
+
+            String requestBody = objectMapper.writeValueAsString(rootNode);
+            InvokeModelRequest request = InvokeModelRequest.builder()
+                    .modelId(modelId)
+                    .contentType("application/json")
+                    .body(SdkBytes.fromUtf8String(requestBody))
+                    .build();
+
+            InvokeModelResponse response = bedrockClient.invokeModel(request);
+            String responseBody = response.body().asString(java.nio.charset.StandardCharsets.UTF_8);
+            com.fasterxml.jackson.databind.JsonNode responseJson = objectMapper.readTree(responseBody);
+            String extractedText = responseJson.path("content").get(0).path("text").asText();
+
+            if (extractedText.contains("```json")) {
+                extractedText = extractedText.substring(extractedText.indexOf("```json") + 7);
+                extractedText = extractedText.substring(0, extractedText.lastIndexOf("```"));
+            } else if (extractedText.contains("```")) {
+                extractedText = extractedText.substring(extractedText.indexOf("```") + 3);
+                extractedText = extractedText.substring(0, extractedText.lastIndexOf("```"));
+            }
+            return extractedText.strip();
+        } catch (Exception e) {
+            throw new RuntimeException("AWS Bedrock 보완 시나리오 생성 실패: " + e.getMessage(), e);
         }
     }
 }

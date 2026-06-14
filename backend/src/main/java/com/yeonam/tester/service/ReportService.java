@@ -1,16 +1,23 @@
 package com.yeonam.tester.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yeonam.tester.domain.AnalysisJob;
 import com.yeonam.tester.domain.Report;
 import com.yeonam.tester.domain.ReportTestCase;
+import com.yeonam.tester.domain.TestCase;
 import com.yeonam.tester.dto.ReportCreateRequest;
 import com.yeonam.tester.dto.ReportListResponse;
 import com.yeonam.tester.dto.ReportPreviewResponse;
 import com.yeonam.tester.dto.ReportResponse;
+import com.yeonam.tester.dto.SupplementaryScenarioDto;
+import com.yeonam.tester.llm.LlmClient;
 import com.yeonam.tester.repository.AnalysisJobRepository;
 import com.yeonam.tester.repository.ReportRepository;
 import com.yeonam.tester.repository.ReportTestCaseRepository;
 import com.yeonam.tester.repository.TestCaseRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +30,9 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -31,6 +41,8 @@ import java.util.stream.Collectors;
 @Service
 public class ReportService {
 
+    private static final Logger log = LoggerFactory.getLogger(ReportService.class);
+
     private final ReportRepository reportRepository;
     private final AnalysisJobRepository analysisJobRepository;
     private final ReportAssemblyService assemblyService;
@@ -38,6 +50,8 @@ public class ReportService {
     private final S3Client s3Client;
     private final ReportTestCaseRepository reportTestCaseRepository;
     private final TestCaseRepository testCaseRepository;
+    private final LlmClient llmClient;
+    private final ObjectMapper objectMapper;
 
     @Value("${aws.s3.buckets.reports}")
     private String reportsBucket;
@@ -48,7 +62,9 @@ public class ReportService {
                          ReportRenderEngine renderEngine,
                          S3Client s3Client,
                          ReportTestCaseRepository reportTestCaseRepository,
-                         TestCaseRepository testCaseRepository) {
+                         TestCaseRepository testCaseRepository,
+                         LlmClient llmClient,
+                         ObjectMapper objectMapper) {
         this.reportRepository = reportRepository;
         this.analysisJobRepository = analysisJobRepository;
         this.assemblyService = assemblyService;
@@ -56,6 +72,8 @@ public class ReportService {
         this.s3Client = s3Client;
         this.reportTestCaseRepository = reportTestCaseRepository;
         this.testCaseRepository = testCaseRepository;
+        this.llmClient = llmClient;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -68,8 +86,50 @@ public class ReportService {
             throw new IllegalArgumentException("Unsupported report format. Must be MARKDOWN or PDF.");
         }
 
+        int targetCount = request.getTargetScenarioCount();
+        if (targetCount > 10) {
+            throw new IllegalArgumentException("targetScenarioCount는 10 이하여야 합니다.");
+        }
+
         AnalysisJob job = analysisJobRepository.findById(analysisId)
                 .orElseThrow(() -> new IllegalArgumentException("Analysis job not found: " + analysisId));
+
+        List<TestCase> existingTcs;
+        if (request.getTestCaseIds() == null || request.getTestCaseIds().isEmpty()) {
+            existingTcs = testCaseRepository.findByAnalysisJob_AnalysisId(analysisId);
+        } else {
+            existingTcs = testCaseRepository.findAllById(request.getTestCaseIds());
+        }
+
+        List<Map<String, Object>> additionalScenarioMaps = new ArrayList<>();
+        String additionalScenariosJson = null;
+
+        if (targetCount > 0 && targetCount > existingTcs.size()) {
+            int needed = targetCount - existingTcs.size();
+            List<String> existingNames = existingTcs.stream()
+                    .map(TestCase::getTestCaseName)
+                    .collect(Collectors.toList());
+            try {
+                String llmResponse = llmClient.generateSupplementaryScenarios(
+                        job.getSummary(), job.getQaPerspective(), existingNames, needed);
+                List<SupplementaryScenarioDto> parsed = objectMapper.readValue(
+                        llmResponse, new TypeReference<List<SupplementaryScenarioDto>>() {});
+                if (parsed.size() > needed) {
+                    parsed = parsed.subList(0, needed);
+                }
+                additionalScenariosJson = objectMapper.writeValueAsString(parsed);
+                for (SupplementaryScenarioDto s : parsed) {
+                    Map<String, Object> m = new HashMap<>();
+                    m.put("testCaseName", s.getTestCaseName());
+                    m.put("testScenario", s.getTestScenario());
+                    m.put("expectedResult", s.getExpectedResult());
+                    m.put("priority", s.getPriority() != null ? s.getPriority() : "MEDIUM");
+                    additionalScenarioMaps.add(m);
+                }
+            } catch (Exception e) {
+                log.warn("보완 시나리오 LLM 생성 실패, 기존 TC만으로 보고서 생성: {}", e.getMessage());
+            }
+        }
 
         String reportId = "RPT-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         // S3 cache single format: always standard markdown
@@ -78,6 +138,7 @@ public class ReportService {
 
         // Assemble and Render content
         Map<String, Object> data = assemblyService.assembleReportData(analysisId, request.getTestCaseIds());
+        data.put("additionalScenarios", additionalScenarioMaps);
         String markdown = renderEngine.renderMarkdown(data);
         byte[] bytes = markdown.getBytes(StandardCharsets.UTF_8);
 
@@ -109,6 +170,7 @@ public class ReportService {
                 .s3Path(s3Path)
                 .format("MARKDOWN") // Standardize DB metadata to MARKDOWN
                 .createdAt(LocalDateTime.now())
+                .additionalScenarios(additionalScenariosJson)
                 .build();
 
         Report savedReport = reportRepository.save(report);
@@ -178,6 +240,7 @@ public class ReportService {
         if ("PDF".equals(report.getFormat())) {
             // For PDF, we can preview the markdown source compiled for this analysis
             Map<String, Object> data = assemblyService.assembleReportData(report.getAnalysisJob().getAnalysisId());
+            data.put("additionalScenarios", parseAdditionalScenariosToMaps(report.getAdditionalScenarios()));
             content = renderEngine.renderMarkdown(data);
         } else if (s3Path != null && s3Path.startsWith("local://")) {
             try {
@@ -186,6 +249,7 @@ public class ReportService {
             } catch (Exception e) {
                 System.err.println("Preview: Local report file lost. Auto-regenerating preview...");
                 Map<String, Object> data = assemblyService.assembleReportData(report.getAnalysisJob().getAnalysisId());
+                data.put("additionalScenarios", parseAdditionalScenariosToMaps(report.getAdditionalScenarios()));
                 content = renderEngine.renderMarkdown(data);
             }
         } else {
@@ -202,6 +266,7 @@ public class ReportService {
                 // If S3 file is missing, regenerate markdown preview dynamically as a fallback
                 System.err.println("Preview: Report file lost in S3. Auto-regenerating preview...");
                 Map<String, Object> data = assemblyService.assembleReportData(report.getAnalysisJob().getAnalysisId());
+                data.put("additionalScenarios", parseAdditionalScenariosToMaps(report.getAdditionalScenarios()));
                 content = renderEngine.renderMarkdown(data);
             }
         }
@@ -246,5 +311,25 @@ public class ReportService {
 
         // Delete from DB
         reportRepository.delete(report);
+    }
+
+    private List<Map<String, Object>> parseAdditionalScenariosToMaps(String json) {
+        if (json == null || json.isBlank()) return Collections.emptyList();
+        try {
+            List<SupplementaryScenarioDto> dtos = objectMapper.readValue(
+                json, new TypeReference<List<SupplementaryScenarioDto>>() {});
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (SupplementaryScenarioDto s : dtos) {
+                Map<String, Object> m = new HashMap<>();
+                m.put("testCaseName", s.getTestCaseName());
+                m.put("testScenario", s.getTestScenario());
+                m.put("expectedResult", s.getExpectedResult());
+                m.put("priority", s.getPriority() != null ? s.getPriority() : "MEDIUM");
+                result.add(m);
+            }
+            return result;
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
     }
 }

@@ -108,6 +108,7 @@ CREATE TABLE report (
     s3_path VARCHAR(500) NOT NULL,
     format VARCHAR(20) NOT NULL,
     created_at TIMESTAMP NOT NULL,
+    additional_scenarios CLOB,
     CONSTRAINT fk_report_job FOREIGN KEY (analysis_id) REFERENCES analysis_job(analysis_id) ON DELETE CASCADE,
     CONSTRAINT fk_report_file FOREIGN KEY (file_id) REFERENCES uploaded_file(file_id) ON DELETE SET NULL
 );

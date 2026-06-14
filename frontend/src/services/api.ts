@@ -173,7 +173,8 @@ export const analysisApi = {
 };
 
 export const reportApi = {
-  generate: (analysisId: string, format: 'MARKDOWN' | 'PDF', testCaseIds?: string[]) => api.post<any>(`/analysis/${analysisId}/reports`, { reportFormat: format, testCaseIds }),
+  generate: (analysisId: string, format: 'MARKDOWN' | 'PDF', testCaseIds?: string[], targetScenarioCount?: number) =>
+    api.post<any>(`/analysis/${analysisId}/reports`, { reportFormat: format, testCaseIds, targetScenarioCount }),
   getByProject: (projectId: string, fileId?: string, analysisId?: string) => api.get<ReportListResponse>(`/projects/${projectId}/reports`, { params: { fileId, analysisId } }),
   getPreview: (reportId: string) => api.get<ReportPreviewResponse>(`/reports/${reportId}`),
   download: (reportId: string, format?: string) => `${API_BASE_URL}/reports/${reportId}/download${format ? `?format=${format}` : ''}`,

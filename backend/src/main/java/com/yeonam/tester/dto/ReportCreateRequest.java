@@ -5,12 +5,14 @@ import java.util.List;
 public class ReportCreateRequest {
     private String reportFormat;
     private List<String> testCaseIds;
+    private int targetScenarioCount;
 
     public ReportCreateRequest() {}
 
-    public ReportCreateRequest(String reportFormat, List<String> testCaseIds) {
+    public ReportCreateRequest(String reportFormat, List<String> testCaseIds, int targetScenarioCount) {
         this.reportFormat = reportFormat;
         this.testCaseIds = testCaseIds;
+        this.targetScenarioCount = targetScenarioCount;
     }
 
     public String getReportFormat() { return reportFormat; }
@@ -19,6 +21,9 @@ public class ReportCreateRequest {
     public List<String> getTestCaseIds() { return testCaseIds; }
     public void setTestCaseIds(List<String> testCaseIds) { this.testCaseIds = testCaseIds; }
 
+    public int getTargetScenarioCount() { return targetScenarioCount; }
+    public void setTargetScenarioCount(int targetScenarioCount) { this.targetScenarioCount = targetScenarioCount; }
+
     public static ReportCreateRequestBuilder builder() {
         return new ReportCreateRequestBuilder();
     }
@@ -26,6 +31,7 @@ public class ReportCreateRequest {
     public static class ReportCreateRequestBuilder {
         private String reportFormat;
         private List<String> testCaseIds;
+        private int targetScenarioCount;
 
         public ReportCreateRequestBuilder reportFormat(String reportFormat) {
             this.reportFormat = reportFormat;
@@ -37,8 +43,13 @@ public class ReportCreateRequest {
             return this;
         }
 
+        public ReportCreateRequestBuilder targetScenarioCount(int targetScenarioCount) {
+            this.targetScenarioCount = targetScenarioCount;
+            return this;
+        }
+
         public ReportCreateRequest build() {
-            return new ReportCreateRequest(reportFormat, testCaseIds);
+            return new ReportCreateRequest(reportFormat, testCaseIds, targetScenarioCount);
         }
     }
 }

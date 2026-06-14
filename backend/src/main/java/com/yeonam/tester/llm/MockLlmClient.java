@@ -1,5 +1,7 @@
 package com.yeonam.tester.llm;
 
+import java.util.List;
+
 public class MockLlmClient implements LlmClient {
 
     @Override
@@ -51,5 +53,22 @@ public class MockLlmClient implements LlmClient {
                   ]
                 }
                 """;
+    }
+
+    @Override
+    public String generateSupplementaryScenarios(String summary, String qaPerspective, List<String> existingNames, int count) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < count; i++) {
+            if (i > 0) sb.append(",");
+            int num = i + 1;
+            sb.append("{")
+              .append("\"testCaseName\":\"보완 시나리오 ").append(num).append("\",")
+              .append("\"testScenario\":\"보완 시나리오 ").append(num).append("에 대한 검증 시나리오\",")
+              .append("\"expectedResult\":\"보완 시나리오 ").append(num).append("의 기대 결과\",")
+              .append("\"priority\":\"MEDIUM\"")
+              .append("}");
+        }
+        sb.append("]");
+        return sb.toString();
     }
 }

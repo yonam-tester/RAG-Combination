@@ -3,32 +3,178 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { analysisApi, reportApi, TestCase, Evidence, PipelineTraceStep } from '../services/api';
 import { RagTraceModal } from './RagTraceModal';
 
-// Subcomponent: Evidence Accordion
-const EvidenceAccordion: React.FC<{ evidence: Evidence }> = ({ evidence }) => {
+// Helper: ## prefix 제거 + 35자 이후 ... 단축
+const truncateSection = (section: string, maxLen = 35): string => {
+  if (!section) return '';
+  const cleaned = section.replace(/^#+\s*/, '');
+  return cleaned.length > maxLen ? cleaned.slice(0, maxLen) + '...' : cleaned;
+};
+
+const SCORE_THRESHOLD = 0.60;
+
+// Subcomponent: 개별 근거 텍스트 아코디언 (문서 그룹 내부)
+const EvidenceAccordion: React.FC<{ evidence: Evidence; dim?: boolean }> = ({ evidence, dim }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const section = truncateSection(evidence.sourceSection || '');
+  const scorePct = evidence.score != null ? Math.round(evidence.score * 100) : null;
 
   return (
-    <div className="mt-2 p-3 bg-surface-container-lowest rounded-lg font-code-sm text-on-surface-variant border-l-2 border-primary">
-      <div 
+    <div className={`p-2.5 rounded-lg border-l-2 ${dim ? 'border-slate-600/40 bg-slate-800/30' : 'border-primary/60 bg-surface-container-lowest'}`}>
+      <div
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between cursor-pointer text-body-sm text-primary hover:underline select-none"
+        className="flex items-center justify-between cursor-pointer select-none gap-2"
       >
-        <span className="font-semibold text-xs flex items-center gap-1">
-          <span className="material-symbols-outlined text-sm">menu_book</span>
-          근거: {evidence.sourceName} {evidence.sourceSection && `(${evidence.sourceSection})`}
-          {evidence.score !== undefined && evidence.score !== null && (
-            <span className="ml-2 text-[10px] text-amber-500 font-mono">({Math.round(evidence.score * 100)}% 유사도)</span>
+        <span className={`text-[11px] flex items-center gap-1 font-semibold leading-tight ${dim ? 'text-slate-500' : 'text-primary'}`}>
+          {section && <span className="font-mono bg-white/5 px-1.5 py-0.5 rounded text-[10px] border border-white/5">{section}</span>}
+          {scorePct != null && (
+            <span className={`text-[10px] font-mono ml-1 ${scorePct >= 60 ? 'text-amber-400' : 'text-slate-600'}`}>
+              {scorePct}%
+            </span>
           )}
         </span>
-        <span className="material-symbols-outlined transition-transform duration-200" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+        <span className="material-symbols-outlined text-sm text-slate-500 shrink-0 transition-transform duration-200" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
           expand_more
         </span>
       </div>
-      
       {isOpen && (
-        <p className="mt-2 text-xs text-slate-400 leading-relaxed font-sans whitespace-pre-wrap">
+        <p className="mt-2 text-[11px] text-slate-400 leading-relaxed font-sans whitespace-pre-wrap border-t border-white/5 pt-2">
           {evidence.evidenceText}
         </p>
+      )}
+    </div>
+  );
+};
+
+// Subcomponent: 출처 문서별 그룹 아코디언
+const DocumentEvidenceGroup: React.FC<{ sourceName: string; evidences: Evidence[]; dim?: boolean }> = ({ sourceName, evidences, dim }) => {
+  const [open, setOpen] = useState(false);
+
+  // 동일 sourceSection 중복 제거
+  const seen = new Set<string>();
+  const deduped = evidences.filter(ev => {
+    const key = truncateSection(ev.sourceSection || '') || ev.evidenceId;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return (
+    <div className={`rounded-lg border overflow-hidden ${dim ? 'border-slate-700/40' : 'border-white/10'}`}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors ${dim ? 'bg-slate-800/20 hover:bg-slate-800/40' : 'bg-white/3 hover:bg-white/6'}`}
+      >
+        <span className={`flex items-center gap-2 text-[11px] font-semibold ${dim ? 'text-slate-500' : 'text-primary'}`}>
+          <span className="material-symbols-outlined text-sm">description</span>
+          <span className="font-mono truncate max-w-[220px]">{sourceName}</span>
+          <span className={`text-[10px] font-normal ${dim ? 'text-slate-600' : 'text-slate-400'}`}>
+            ({deduped.length}개 섹션)
+          </span>
+        </span>
+        <span className="material-symbols-outlined text-sm text-slate-500 shrink-0 transition-transform duration-200" style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+          expand_more
+        </span>
+      </button>
+      {open && (
+        <div className="divide-y divide-white/5 px-2 py-1.5 space-y-1">
+          {deduped.map(ev => (
+            <EvidenceAccordion key={ev.evidenceId} evidence={ev} dim={dim} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Subcomponent: 전체 근거 섹션 (출처 목록 + 고신뢰도 그룹 + 저신뢰도 섹션)
+const EvidenceSection: React.FC<{ evidences: Evidence[] }> = ({ evidences }) => {
+  const [lowOpen, setLowOpen] = useState(false);
+
+  const highConf = evidences.filter(ev => (ev.score ?? 0) >= SCORE_THRESHOLD);
+  const lowConf  = evidences.filter(ev => (ev.score ?? 0) <  SCORE_THRESHOLD);
+
+  // 고신뢰도 출처 문서 그룹핑
+  const grouped: Record<string, Evidence[]> = {};
+  highConf.forEach(ev => {
+    (grouped[ev.sourceName] ??= []).push(ev);
+  });
+  const sourceNames = Object.keys(grouped);
+
+  return (
+    <div className="space-y-3 pt-3 border-t border-white/5" onClick={e => e.stopPropagation()}>
+      {/* 고신뢰도 근거 (문서별) */}
+      <div className="space-y-2">
+        {sourceNames.map(name => (
+          <DocumentEvidenceGroup key={name} sourceName={name} evidences={grouped[name]} />
+        ))}
+      </div>
+
+      {/* 저신뢰도 근거 (접힘) */}
+      {lowConf.length > 0 && (
+        <div>
+          <button
+            onClick={() => setLowOpen(v => !v)}
+            className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg bg-slate-800/30 border border-slate-700/30 text-slate-500 text-[10px] hover:bg-slate-800/50 transition-colors"
+          >
+            <span className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-sm">low_priority</span>
+              저신뢰도 근거 ({lowConf.length}건 · 유사도 60% 미만)
+            </span>
+            <span className="material-symbols-outlined text-sm transition-transform duration-200" style={{ transform: lowOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+              expand_more
+            </span>
+          </button>
+          {lowOpen && (
+            <div className="mt-1.5 space-y-1.5 pl-2 border-l border-slate-700/30">
+              {/* 저신뢰도도 출처별 그룹 */}
+              {Object.entries(
+                lowConf.reduce<Record<string, Evidence[]>>((acc, ev) => {
+                  (acc[ev.sourceName] ??= []).push(ev);
+                  return acc;
+                }, {})
+              ).map(([name, evs]) => (
+                <DocumentEvidenceGroup key={name} sourceName={name} evidences={evs} dim />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Subcomponent: RiskTag 목록 — 중복 제거, 5개 표시 후 ... 토글
+const TAG_PREVIEW = 5;
+const RiskTagList: React.FC<{ tags: string[] }> = ({ tags }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  // 중복 제거 + # 중복 접두사 정규화
+  const unique = [...new Set(tags.map(t => t.startsWith('#') ? t.slice(1) : t))];
+  const visible = expanded ? unique : unique.slice(0, TAG_PREVIEW);
+  const hidden  = unique.length - TAG_PREVIEW;
+
+  return (
+    <div className="flex flex-wrap gap-xs items-center">
+      {visible.map(tag => (
+        <span key={tag} className="text-code-sm text-on-surface-variant bg-white/5 px-2 py-0.5 rounded text-[11px] font-mono">
+          #{tag}
+        </span>
+      ))}
+      {!expanded && hidden > 0 && (
+        <button
+          onClick={e => { e.stopPropagation(); setExpanded(true); }}
+          className="text-[11px] text-slate-500 hover:text-slate-300 font-mono px-1.5 py-0.5 rounded bg-white/5 border border-white/5 hover:border-white/10 transition-colors"
+        >
+          +{hidden} 더보기…
+        </button>
+      )}
+      {expanded && unique.length > TAG_PREVIEW && (
+        <button
+          onClick={e => { e.stopPropagation(); setExpanded(false); }}
+          className="text-[11px] text-slate-500 hover:text-slate-300 font-mono px-1.5 py-0.5 rounded bg-white/5 border border-white/5 hover:border-white/10 transition-colors"
+        >
+          접기
+        </button>
       )}
     </div>
   );
@@ -171,13 +317,7 @@ const TestCaseCard: React.FC<{ testCase: TestCase; isSelected: boolean; onToggle
         )}
 
         {testCase.riskTags && testCase.riskTags.length > 0 && (
-          <div className="flex flex-wrap gap-xs">
-            {testCase.riskTags.map((tag) => (
-              <span key={tag} className="text-code-sm text-on-surface-variant bg-white/5 px-2 py-0.5 rounded text-[11px] font-mono">
-                #{tag}
-              </span>
-            ))}
-          </div>
+          <RiskTagList tags={testCase.riskTags} />
         )}
       </div>
 
@@ -227,11 +367,7 @@ const TestCaseCard: React.FC<{ testCase: TestCase; isSelected: boolean; onToggle
       )}
 
       {testCase.evidences && testCase.evidences.length > 0 && (
-        <div className="space-y-2 pt-2 border-t border-white/5" onClick={(e) => e.stopPropagation()}>
-          {testCase.evidences.map((ev) => (
-            <EvidenceAccordion key={ev.evidenceId} evidence={ev} />
-          ))}
-        </div>
+        <EvidenceSection evidences={testCase.evidences} />
       )}
     </div>
   );
@@ -254,6 +390,7 @@ export const AnalysisResultPage: React.FC = () => {
   // Report Modal
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportFormat, setReportFormat] = useState<'MARKDOWN' | 'PDF'>('MARKDOWN');
+  const [targetScenarioCount, setTargetScenarioCount] = useState<number>(0);
   const [reportGenerating, setReportGenerating] = useState(false);
   const [isTraceModalOpen, setIsTraceModalOpen] = useState(false);
   const [pipelineTrace, setPipelineTrace] = useState<PipelineTraceStep[]>([]);
@@ -272,6 +409,7 @@ export const AnalysisResultPage: React.FC = () => {
       const response = await analysisApi.getResults(id);
       setSummary(response.data.summary);
       setTestCases(response.data.testCases);
+      setTargetScenarioCount(response.data.testCases.length);
       setPipelineTrace(response.data.pipelineTrace || []);
       if (response.data.testCases) {
         setSelectedTestCaseIds(response.data.testCases.map((tc: TestCase) => tc.testCaseId));
@@ -288,7 +426,7 @@ export const AnalysisResultPage: React.FC = () => {
   const handleGenerateReport = async () => {
     setReportGenerating(true);
     try {
-      const response = await reportApi.generate(analysisId, reportFormat, selectedTestCaseIds);
+      const response = await reportApi.generate(analysisId, reportFormat, selectedTestCaseIds, targetScenarioCount);
       setIsReportModalOpen(false);
       
       // Redirect to report preview page
@@ -534,6 +672,7 @@ export const AnalysisResultPage: React.FC = () => {
               alert('보고서에 수록할 테스트 케이스를 최소 1개 이상 선택해 주세요.');
               return;
             }
+            setTargetScenarioCount(Math.min(testCases.length, 10));
             setIsReportModalOpen(true);
           }}
           className="px-xl py-4 rounded-xl bg-gradient-to-r from-[#6366F1] to-[#8B5CF6] text-white font-bold text-sm glow-indigo hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2"
@@ -595,6 +734,30 @@ export const AnalysisResultPage: React.FC = () => {
                 </div>
               </label>
             </div>
+
+            {/* 시나리오 수 선택 */}
+            {testCases.length < 10 && (
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-indigo-400">format_list_numbered</span>
+                  <span className="text-sm font-semibold text-gray-300">시나리오 수 선택 (최대 10개)</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={Math.min(testCases.length > 0 ? testCases.length : 1, 10)}
+                    max={10}
+                    value={targetScenarioCount}
+                    onChange={(e) => setTargetScenarioCount(Number(e.target.value))}
+                    className="flex-1 accent-indigo-500"
+                  />
+                  <span className="text-indigo-300 font-bold w-8 text-center">{targetScenarioCount}</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  현재 분석된 테스트 케이스 {testCases.length}개 + 보완 시나리오 {Math.max(0, targetScenarioCount - testCases.length)}개
+                </p>
+              </div>
+            )}
 
             <div className="flex justify-end gap-3 pt-2">
               <button

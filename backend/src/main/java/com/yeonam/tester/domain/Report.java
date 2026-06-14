@@ -28,18 +28,23 @@ public class Report {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    @Lob
+    @Column(name = "additional_scenarios", columnDefinition = "CLOB")
+    private String additionalScenarios;
+
     @OneToMany(mappedBy = "report", cascade = CascadeType.ALL, orphanRemoval = true)
     private java.util.List<ReportTestCase> reportTestCases = new java.util.ArrayList<>();
 
     public Report() {}
 
-    public Report(String reportId, AnalysisJob analysisJob, UploadedFile uploadedFile, String s3Path, String format, LocalDateTime createdAt) {
+    public Report(String reportId, AnalysisJob analysisJob, UploadedFile uploadedFile, String s3Path, String format, LocalDateTime createdAt, String additionalScenarios) {
         this.reportId = reportId;
         this.analysisJob = analysisJob;
         this.uploadedFile = uploadedFile;
         this.s3Path = s3Path;
         this.format = format;
         this.createdAt = createdAt;
+        this.additionalScenarios = additionalScenarios;
     }
 
     public String getReportId() { return reportId; }
@@ -60,6 +65,9 @@ public class Report {
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
+    public String getAdditionalScenarios() { return additionalScenarios; }
+    public void setAdditionalScenarios(String additionalScenarios) { this.additionalScenarios = additionalScenarios; }
+
     public java.util.List<ReportTestCase> getReportTestCases() { return reportTestCases; }
     public void setReportTestCases(java.util.List<ReportTestCase> reportTestCases) { this.reportTestCases = reportTestCases; }
 
@@ -74,6 +82,7 @@ public class Report {
         private String s3Path;
         private String format;
         private LocalDateTime createdAt;
+        private String additionalScenarios;
 
         public ReportBuilder reportId(String reportId) {
             this.reportId = reportId;
@@ -105,8 +114,13 @@ public class Report {
             return this;
         }
 
+        public ReportBuilder additionalScenarios(String additionalScenarios) {
+            this.additionalScenarios = additionalScenarios;
+            return this;
+        }
+
         public Report build() {
-            return new Report(reportId, analysisJob, uploadedFile, s3Path, format, createdAt);
+            return new Report(reportId, analysisJob, uploadedFile, s3Path, format, createdAt, additionalScenarios);
         }
     }
 }
