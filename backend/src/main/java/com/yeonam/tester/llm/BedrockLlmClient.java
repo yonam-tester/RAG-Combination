@@ -135,53 +135,29 @@ public class BedrockLlmClient implements LlmClient {
                 ? "(없음)"
                 : existingNames.stream().map(n -> "- " + n).collect(java.util.stream.Collectors.joining("\n"));
 
-            String systemPrompt = """
-                당신은 소프트웨어 QA 아키텍트입니다. 기존 테스트 케이스를 분석하여 검증 사각지대(경계값, 예외 흐름, 보안, 비기능)를 보완하는 추가 테스트 시나리오를 설계합니다.
-                출력은 반드시 마크다운 없는 순수 JSON 배열이어야 하며, 그 외 어떤 텍스트도 포함하지 마십시오.
-                """;
-
+            String systemPrompt = "당신은 QA 아키텍트입니다. 출력은 반드시 마크다운 없는 순수 JSON 배열이어야 합니다.";
             String userPrompt = String.format("""
-                기존 테스트 케이스와 중복되지 않는 보완 테스트 시나리오를 %d개 생성하세요.
+                아래 기존 테스트 케이스와 중복되지 않는 새로운 테스트 케이스를 %d개 생성하세요.
 
-                [시스템 분석 요약]
+                [기존 테스트 케이스 이름 목록]
                 %s
 
-                [QA 검증 관점]
+                [QA 관점]
                 %s
 
-                [기존 테스트 케이스 (아래 항목과 중복 금지)]
+                [분석 요약]
                 %s
 
-                [보완 지침]
-                1. 기존 TC가 다루지 않는 예외 흐름, 경계값, 보안 취약점, 성능 관점을 우선 발굴하십시오.
-                2. 각 시나리오는 단계별 절차를 구체적으로 포함해야 합니다.
-                3. technique은 다음 중 적합한 것을 선택하십시오:
-                   Boundary Value Analysis / Equivalence Partitioning / Error Guessing / State Transition Testing / Decision Table Testing / Negative Testing / Security Testing / Performance Testing
-                4. riskTags는 해당 시나리오의 위험 분류를 나타내는 2~3개의 태그이며, # 접두사 없이 작성하십시오.
-                5. 반드시 %d개만 생성하십시오.
-
-                출력 JSON 배열 규격 (정확히 %d개):
-                [
-                  {
-                    "testCaseName": "시나리오 이름 (기존 TC와 중복되지 않는 새로운 관점)",
-                    "testScenario": "무엇을 왜 검증하는지 1~2문장 구체적으로",
-                    "precondition": "테스트 시작 전 필요한 환경과 상태",
-                    "testSteps": "1. 단계 1\\n2. 단계 2\\n3. 단계 3",
-                    "expectedResult": "테스트 통과 기준이 되는 구체적인 결과",
-                    "priority": "HIGH | MEDIUM | LOW",
-                    "technique": "적용한 QA 설계 기법",
-                    "riskTags": ["태그1", "태그2"]
-                  }
-                ]
-                """, count,
-                    summary != null ? summary : "(요약 없음)",
-                    qaPerspective != null ? qaPerspective : "(관점 미지정)",
-                    existingNamesStr,
-                    count, count);
+                반드시 %d개만 생성하고, 다음 형식의 순수 JSON 배열로만 반환하세요:
+                [{"testCaseName":"...","testScenario":"...","expectedResult":"...","priority":"HIGH|MEDIUM|LOW"}]
+                """, count, existingNamesStr,
+                    qaPerspective != null ? qaPerspective : "",
+                    summary != null ? summary : "",
+                    count);
 
             ObjectNode rootNode = objectMapper.createObjectNode();
             rootNode.put("anthropic_version", "bedrock-2023-05-31");
-            rootNode.put("max_tokens", 4096);
+            rootNode.put("max_tokens", 2048);
             rootNode.put("system", systemPrompt);
 
             ArrayNode messagesArray = objectMapper.createArrayNode();
