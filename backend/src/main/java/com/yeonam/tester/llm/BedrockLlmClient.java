@@ -11,6 +11,7 @@ import software.amazon.awssdk.services.bedrockruntime.model.InvokeModelRequest;
 import software.amazon.awssdk.services.bedrockruntime.model.InvokeModelResponse;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 public class BedrockLlmClient implements LlmClient {
 
@@ -125,5 +126,11 @@ public class BedrockLlmClient implements LlmClient {
         } catch (Exception e) {
             throw new RuntimeException("AWS Bedrock LLM 호출에 실패했습니다: " + e.getMessage(), e);
         }
+    }
+
+    @Override
+    public String generateSupplementaryScenarios(String summary, String qaPerspective, List<String> existingNames, int count) {
+        // TODO: Task 6에서 구현 예정
+        throw new UnsupportedOperationException("generateSupplementaryScenarios() is not yet implemented in BedrockLlmClient");
     }
 }
