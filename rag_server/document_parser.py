@@ -11,10 +11,10 @@ from docx import Document
 logger = logging.getLogger("rag_server.document_parser")
 
 # S3 Client configuration
-s3_endpoint_url = os.getenv("S3_ENDPOINT_URL", "http://localhost:9000")
-s3_bucket = os.getenv("S3_BUCKET", "yeonam-documents")
-aws_access_key = os.getenv("AWS_ACCESS_KEY_ID", "minioadmin")
-aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY", "minioadmin")
+s3_endpoint_url = os.getenv("AWS_S3_ENDPOINT") or os.getenv("S3_ENDPOINT_URL", "http://localhost:9000")
+s3_bucket = os.getenv("AWS_S3_BUCKET_DOCUMENTS") or os.getenv("S3_BUCKET", "yeonam-documents")
+aws_access_key = os.getenv("AWS_ACCESS_KEY_ID") or os.getenv("AWS_S3_ACCESS_KEY", "minioadmin")
+aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY") or os.getenv("AWS_S3_SECRET_KEY", "minioadmin")
 
 s3_client = boto3.client(
     "s3",
