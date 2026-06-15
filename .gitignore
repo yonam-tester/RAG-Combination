@@ -19,6 +19,8 @@ frontend/build/
 # Environment variables
 **/.env
 **/.env.*
+!.env.example
+!**/.env.example
 
 # Data & generated files
 backend/data/

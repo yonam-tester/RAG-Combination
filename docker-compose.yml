@@ -1,18 +1,67 @@
-version: '3.8'
-
 services:
+  nginx:
+    image: nginx:stable-alpine
+    container_name: yeonam-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+      - rag-server
+    networks:
+      - yeonam-network
+    restart: always
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: yeonam-backend
+    expose:
+      - "8080"
+    env_file:
+      - .env
+    volumes:
+      - backend_data:/app/data
+    networks:
+      - yeonam-network
+    restart: always
+
+  rag-server:
+    build:
+      context: ./rag_server
+      dockerfile: Dockerfile
+    container_name: yeonam-rag
+    expose:
+      - "8000"
+    env_file:
+      - .env
+    networks:
+      - yeonam-network
+    restart: always
+
   minio:
     image: minio/minio:RELEASE.2024-02-17T01-15-57Z
     container_name: yeonam-minio
     ports:
-      - "9000:9000" # S3 API
-      - "9001:9001" # Console Web UI
+      - "9000:9000"
+      - "9001:9001"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
+    networks:
+      - yeonam-network
+    restart: always
+
+networks:
+  yeonam-network:
+    driver: bridge
 
 volumes:
+  backend_data:
   minio_data:
