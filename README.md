@@ -198,7 +198,7 @@ npm install
 npm run dev
 ```
 
-브라우저에서 `http://localhost:5173`으로 접속합니다.
+브라우저에서 `http://localhost:3000`으로 접속합니다.
 
 ---
 
@@ -206,7 +206,7 @@ npm run dev
 
 | 서비스 | 포트 | 설명 |
 |--------|------|------|
-| Frontend (React) | 5173 | Vite 개발 서버 |
+| Frontend (React) | 3000 | Vite 개발 서버 |
 | Backend (Spring Boot) | 8080 | REST API 서버 |
 | AI Server (FastAPI) | 8000 | RAG Server 또는 LLM Server |
 | MinIO S3 API | 9000 | 오브젝트 스토리지 API |
@@ -231,7 +231,35 @@ npm run dev
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `AI_SERVER_URL` | `http://localhost:8081` | 연동할 AI 서버 주소 |
+| `AI_SERVER_URL` | `http://localhost:8000` | 연동할 AI 서버 주소 |
+| `LLM_PROVIDER` | `openai` | LLM 프로바이더 (`openai` 또는 `bedrock`) |
+| `LLM_API_KEY` | 없음 (**필수**) | OpenAI / LiteLLM / Anthropic proxy API 키 |
+| `LLM_BASE_URL` | `https://api.openai.com/v1` | LLM 엔드포인트 URL (LiteLLM 프록시 사용 시 변경) |
+| `LLM_MODEL` | `gpt-4o` | 사용할 모델명 |
+| `AWS_REGION` | `us-east-1` | Bedrock 사용 시 AWS 리전 |
+| `AWS_BEDROCK_MODEL_ID` | `anthropic.claude-3-haiku-20240307-v1:0` | Bedrock 사용 시 모델 ID |
+
+**설정 예시:**
+
+```env
+# OpenAI 직접 사용 (기본값)
+LLM_PROVIDER=openai
+LLM_API_KEY=sk-...
+LLM_MODEL=gpt-4o
+
+# LiteLLM 프록시 (Claude, Gemini 등 멀티 프로바이더)
+LLM_PROVIDER=openai
+LLM_BASE_URL=http://localhost:4000/v1
+LLM_API_KEY=anything
+LLM_MODEL=claude-3-5-sonnet-20241022
+
+# AWS Bedrock
+LLM_PROVIDER=bedrock
+AWS_REGION=us-east-1
+AWS_BEDROCK_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
+```
+
+> **주의:** `LLM_API_KEY`는 `LLM_PROVIDER=openai`(기본값) 사용 시 필수입니다. 미설정 시 Spring Boot 기동 오류가 발생합니다.
 
 ---
 
@@ -404,4 +432,4 @@ API Key 만료/오류 발생 시 AI 서버가 `FAILED` 콜백을 즉시 전송�
 
 **MinIO 연결 오류:** 백엔드 부팅 시 MinIO 버킷 존재 여부를 확인하고 자동 생성합니다. S3 연결 오류 발생 시 Docker Container의 MinIO(포트 9000)가 정상 실행 중인지 확인하세요.
 
-**MOCK 모드 활용:** API 비용 없이 전체 파이프라인을 테스트하려면 AI 서버 `.env`에서 `MOCK_LLM=true`, `MOCK_RAG=true`로 설정하세요.
+**MOCK 모드 활용:** API 비용 없이 AI 서버(rag_server/llm_server) 파이프라인을 테스트하려면 AI 서버 `.env`에서 `MOCK_LLM=true`, `MOCK_RAG=true`로 설정하세요. 단, 백엔드(Spring Boot) 자체 LLM 클라이언트(보완 시나리오 생성)는 Mock 모드가 없으므로 `LLM_API_KEY` 설정이 필수입니다.
