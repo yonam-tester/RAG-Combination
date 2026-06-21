@@ -2,7 +2,6 @@
 set -euo pipefail
 
 DEMO_ENV="${HOME}/.demo.env"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ~/.demo.env 존재 여부 확인
 if [ ! -f "$DEMO_ENV" ]; then
@@ -25,24 +24,25 @@ LLM_API_KEY="${LLM_API_KEY:?LLM_API_KEY가 ~/.demo.env에 없습니다}"
 # ~ 경로 확장
 EC2_PEM="${EC2_PEM/#\~/$HOME}"
 
-SSH_CMD="ssh -i ${EC2_PEM} -o StrictHostKeyChecking=no ubuntu@${EC2_HOST}"
+SSH_CMD=(ssh -i "${EC2_PEM}" -o StrictHostKeyChecking=no "ubuntu@${EC2_HOST}")
+ESCAPED_KEY=$(printf '%q' "${LLM_API_KEY}")
 
 MODE="${1:-}"
 
 case "$MODE" in
   --preflight)
     echo "=== 사전 점검 ==="
-    $SSH_CMD "cd /home/ubuntu/app && bash scripts/verify.sh"
+    "${SSH_CMD[@]}" "cd /home/ubuntu/app && bash scripts/verify.sh"
     ;;
 
   --run)
     echo "=== 사전 점검 ==="
-    $SSH_CMD "cd /home/ubuntu/app && bash scripts/verify.sh"
+    "${SSH_CMD[@]}" "cd /home/ubuntu/app && bash scripts/verify.sh"
 
     echo ""
     echo "=== LLM vs RAG 평가 실행 중 (약 2-3분) ==="
-    $SSH_CMD "cd /home/ubuntu/app && \
-      LLM_API_KEY='${LLM_API_KEY}' \
+    "${SSH_CMD[@]}" "cd /home/ubuntu/app && \
+      LLM_API_KEY=${ESCAPED_KEY} \
       LLM_SERVER_URL=http://localhost:8001 \
       RAG_SERVER_URL=http://localhost:8000 \
       PUSHGATEWAY_URL=http://localhost:9091 \
