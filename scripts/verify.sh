@@ -12,7 +12,7 @@ APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 check_containers() {
   local total
-  total=$(docker compose -f "$APP_DIR/docker-compose.yml" ps --status running 2>/dev/null | grep -c "running" || true)
+  total=$(docker compose -f "$APP_DIR/docker-compose.yml" ps --status running 2>/dev/null | grep -c " Up " || true)
   local expected=9
   if [ "$total" -ge "$expected" ]; then
     echo -e "$PASS 컨테이너 (${total}/${expected} Up)"
