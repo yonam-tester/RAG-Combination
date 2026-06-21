@@ -1,0 +1,244 @@
+{
+  "uid": "yeonam-overview",
+  "title": "연암 테스터 관측성",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-7d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "LLM vs RAG 비교",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "type": "bargauge",
+      "title": "정확도 비교 (키워드 매칭 %)",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "options": {
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "targets": [
+        {
+          "expr": "eval_accuracy{job=\"eval_runner\"}",
+          "legendFormat": "{{mode}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "green", "value": 0.75 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "bargauge",
+      "title": "LLM-as-Judge 점수 (0~10)",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "options": {
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "targets": [
+        {
+          "expr": "eval_judge_score{job=\"eval_runner\"}",
+          "legendFormat": "{{mode}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 10,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "yellow", "value": 5 },
+              { "color": "green", "value": 7.5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "bargauge",
+      "title": "평균 토큰 사용량",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "options": {
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "targets": [
+        {
+          "expr": "eval_token_count{job=\"eval_runner\"}",
+          "legendFormat": "{{mode}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "yellow", "value": 1000 },
+              { "color": "red", "value": 3000 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "row",
+      "title": "테스트 커버리지",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "collapsed": false
+    },
+    {
+      "id": 6,
+      "type": "gauge",
+      "title": "Backend 커버리지",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 10 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "expr": "eval_coverage_backend{job=\"eval_runner\"}",
+          "legendFormat": "backend"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "green", "value": 0.8 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "gauge",
+      "title": "RAG Server 커버리지",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 10 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "expr": "eval_coverage_rag_server{job=\"eval_runner\"}",
+          "legendFormat": "rag-server"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "green", "value": 0.8 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "gauge",
+      "title": "LLM Server 커버리지",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 10 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "expr": "eval_coverage_llm_server{job=\"eval_runner\"}",
+          "legendFormat": "llm-server"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "green", "value": 0.8 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "인프라 리소스",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+      "collapsed": false
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "컨테이너 CPU 사용률",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 19 },
+      "targets": [
+        {
+          "expr": "rate(container_cpu_usage_seconds_total{image!=\"\",name=~\"yeonam.*\"}[2m])",
+          "legendFormat": "{{name}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "컨테이너 메모리 사용량",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 19 },
+      "targets": [
+        {
+          "expr": "container_memory_usage_bytes{image!=\"\",name=~\"yeonam.*\"}",
+          "legendFormat": "{{name}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "LLM/RAG 요청 처리 시간 (p50)",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 19 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, rate(llm_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "llm p50"
+        },
+        {
+          "expr": "histogram_quantile(0.5, rate(rag_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "rag p50"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    }
+  ]
+}
