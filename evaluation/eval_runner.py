@@ -53,7 +53,7 @@ def judge_score(requirement: str, output: str, judge_prompt_template: str) -> fl
     prompt = judge_prompt_template.replace("{requirement}", requirement).replace("{output}", output[:2000])
     try:
         response = httpx.post(
-            f"{RAG_SERVER_URL}/api/eval/generate",
+            f"{LLM_SERVER_URL}/api/eval/generate",
             json={"text": prompt, "perspectives": [], "llm_api_key": LLM_API_KEY},
             timeout=120.0
         )

@@ -226,19 +226,129 @@
     {
       "id": 12,
       "type": "timeseries",
-      "title": "LLM/RAG 요청 처리 시간 (p50)",
+      "title": "LLM/RAG 요청 처리 시간 (p50 / p95)",
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 19 },
       "targets": [
         {
           "expr": "histogram_quantile(0.5, rate(llm_request_duration_seconds_bucket[5m]))",
-          "legendFormat": "llm p50"
+          "legendFormat": "LLM p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(llm_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "LLM p95"
         },
         {
           "expr": "histogram_quantile(0.5, rate(rag_request_duration_seconds_bucket[5m]))",
-          "legendFormat": "rag p50"
+          "legendFormat": "RAG p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(rag_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "RAG p95"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "s" } }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "lineWidth": 2 }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 13,
+      "type": "row",
+      "title": "요청 이벤트 시계열",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
+      "collapsed": false
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "서비스별 분당 요청 수",
+      "description": "이벤트 드리븐 요청이 언제 발생했는지 시간대별로 확인",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+      "targets": [
+        {
+          "expr": "rate(llm_request_duration_seconds_count[5m]) * 60",
+          "legendFormat": "LLM 요청/분"
+        },
+        {
+          "expr": "rate(rag_request_duration_seconds_count[5m]) * 60",
+          "legendFormat": "RAG 요청/분"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqpm",
+          "custom": { "fillOpacity": 15, "lineWidth": 2 }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "서비스별 토큰 소비 속도",
+      "description": "각 서비스의 토큰 소비량 변화율 — eval 실행 시 급증",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+      "targets": [
+        {
+          "expr": "rate(llm_tokens_total{service=\"llm\"}[5m])",
+          "legendFormat": "LLM 토큰/초"
+        },
+        {
+          "expr": "rate(rag_tokens_total{service=\"rag\"}[5m])",
+          "legendFormat": "RAG 토큰/초"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "fillOpacity": 10, "lineWidth": 2 }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "eval 점수 추이 (실행 시점별)",
+      "description": "CI/데모 실행마다 기록된 정확도 — 횡축이 eval 발생 시점",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 36 },
+      "targets": [
+        {
+          "expr": "eval_accuracy{job=\"eval_runner\",mode=\"llm\"}",
+          "legendFormat": "LLM 정확도"
+        },
+        {
+          "expr": "eval_accuracy{job=\"eval_runner\",mode=\"rag\"}",
+          "legendFormat": "RAG 정확도"
+        },
+        {
+          "expr": "eval_judge_score{job=\"eval_runner\",mode=\"llm\"} / 10",
+          "legendFormat": "LLM Judge (÷10 정규화)"
+        },
+        {
+          "expr": "eval_judge_score{job=\"eval_runner\",mode=\"rag\"} / 10",
+          "legendFormat": "RAG Judge (÷10 정규화)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": { "fillOpacity": 5, "lineWidth": 2 },
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "green", "value": 0.75 }
+            ]
+          }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } }
     }
   ]
 }
