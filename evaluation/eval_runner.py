@@ -125,6 +125,7 @@ def main():
         text = case["input_doc"]
         keywords = case["expected_keywords"]
 
+        time.sleep(5)  # 메모리 제한 EC2에서 서버 GC 대기
         llm_result = call_service(LLM_SERVER_URL, text, [])
         rag_result = call_service(RAG_SERVER_URL, text, [])
 
