@@ -1,0 +1,10 @@
+{"id": "TC-001", "input_doc": "사용자는 이메일과 비밀번호로 로그인할 수 있어야 한다. 잘못된 비밀번호 입력 시 오류 메시지를 표시한다.", "expected_keywords": ["로그인", "이메일", "비밀번호", "인증", "오류"], "expected_test_case_count": 2}
+{"id": "TC-002", "input_doc": "사용자는 상품 목록을 가격 오름차순 또는 내림차순으로 정렬할 수 있어야 한다.", "expected_keywords": ["정렬", "가격", "상품", "오름차순", "내림차순"], "expected_test_case_count": 2}
+{"id": "TC-003", "input_doc": "관리자는 사용자 계정을 비활성화하거나 삭제할 수 있어야 한다. 삭제된 계정은 복구할 수 없다.", "expected_keywords": ["관리자", "계정", "비활성화", "삭제"], "expected_test_case_count": 2}
+{"id": "TC-004", "input_doc": "파일 업로드 기능은 PDF, DOCX 형식만 허용하며 최대 10MB까지 업로드 가능하다.", "expected_keywords": ["파일", "업로드", "PDF", "DOCX", "용량"], "expected_test_case_count": 3}
+{"id": "TC-005", "input_doc": "결제 완료 후 사용자에게 이메일 영수증이 자동 발송되어야 한다.", "expected_keywords": ["결제", "이메일", "영수증", "발송"], "expected_test_case_count": 2}
+{"id": "TC-006", "input_doc": "시스템은 동시에 최대 1000명의 사용자 요청을 처리할 수 있어야 한다. 처리 시간은 3초 이내여야 한다.", "expected_keywords": ["동시", "성능", "응답시간", "부하"], "expected_test_case_count": 2}
+{"id": "TC-007", "input_doc": "사용자는 비밀번호를 변경할 수 있으며, 현재 비밀번호 확인 후 새 비밀번호를 설정한다. 새 비밀번호는 8자 이상이어야 한다.", "expected_keywords": ["비밀번호", "변경", "확인", "보안"], "expected_test_case_count": 3}
+{"id": "TC-008", "input_doc": "검색 기능은 상품명, 카테고리, 브랜드로 필터링이 가능하며 실시간 검색 결과를 반환한다.", "expected_keywords": ["검색", "필터", "카테고리", "브랜드"], "expected_test_case_count": 3}
+{"id": "TC-009", "input_doc": "장바구니에 담긴 상품의 수량을 변경하거나 삭제할 수 있다. 수량이 0이 되면 자동으로 삭제된다.", "expected_keywords": ["장바구니", "수량", "삭제", "변경"], "expected_test_case_count": 2}
+{"id": "TC-010", "input_doc": "API 응답은 항상 JSON 형식이어야 하며, 오류 발생 시 HTTP 상태 코드와 오류 메시지를 포함해야 한다.", "expected_keywords": ["API", "JSON", "HTTP", "오류", "상태코드"], "expected_test_case_count": 2}
