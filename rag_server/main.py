@@ -1,8 +1,9 @@
-from fastapi import FastAPI, BackgroundTasks, status
+from fastapi import FastAPI, BackgroundTasks, status, Response
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 import logging
 import os
 import time
@@ -186,6 +187,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Yeonam Tester RAG AI Server", lifespan=lifespan)
 
+RAG_TOKEN_COUNTER = Counter(
+    'rag_tokens_total',
+    'Total tokens processed by rag-server',
+    ['service']
+)
+RAG_REQUEST_DURATION = Histogram(
+    'rag_request_duration_seconds',
+    'RAG request duration in seconds',
+    ['service'],
+    buckets=[1, 5, 10, 30, 60, 120]
+)
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
     logger.error(f"Request validation error: {exc.errors()}")
@@ -263,6 +276,47 @@ async def delete_vectors_api(fileId: str):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"status": "error", "message": f"벡터 삭제 오류: {str(e)}"}
         )
+
+@app.get("/metrics")
+def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+class EvalRequest(BaseModel):
+    text: str
+    perspectives: List[str] = []
+    llm_api_key: Optional[str] = None
+
+
+@app.post("/api/eval/generate")
+async def eval_generate_rag(req: EvalRequest):
+    start = time.time()
+
+    parsed_documents = [{"text": req.text, "file_id": "eval-doc", "file_name": "eval.txt"}]
+    chunks = chunk_document(req.text, "eval-doc", "eval.txt")
+    vector_db_manager.add_chunks(chunks)
+
+    requirements = await extract_requirements(parsed_documents, req.llm_api_key)
+
+    all_test_cases = []
+    for requirement in requirements:
+        evidences = retrieve_evidences(requirement["text"], exclude_chunk_ids=set())
+        prompt = build_prompt(requirement["text"], evidences[:3], "", req.perspectives)
+        raw_tcs = await call_llm_with_key(prompt, req.llm_api_key)
+        all_test_cases.extend(raw_tcs)
+
+    duration_s = time.time() - start
+    token_count = len(req.text.split())
+
+    RAG_TOKEN_COUNTER.labels(service="rag").inc(token_count)
+    RAG_REQUEST_DURATION.labels(service="rag").observe(duration_s)
+
+    return {
+        "output": str(all_test_cases),
+        "token_count": token_count,
+        "duration_ms": int(duration_s * 1000)
+    }
+
 
 @app.get("/health")
 async def health_check():

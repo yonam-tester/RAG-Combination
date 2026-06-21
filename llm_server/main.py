@@ -1,10 +1,12 @@
-from fastapi import FastAPI, BackgroundTasks, status
+from fastapi import FastAPI, BackgroundTasks, status, Response
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 import logging
 import os
+import time
 
 from queue_manager import queue_manager
 from document_parser import process_and_extract
@@ -70,6 +72,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Yeonam Tester MVP AI Server", lifespan=lifespan)
 
+LLM_TOKEN_COUNTER = Counter(
+    'llm_tokens_total',
+    'Total tokens processed by llm-server',
+    ['service']
+)
+LLM_REQUEST_DURATION = Histogram(
+    'llm_request_duration_seconds',
+    'LLM request duration in seconds',
+    ['service'],
+    buckets=[1, 5, 10, 30, 60, 120]
+)
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
     logger.error(f"Request validation error: {exc.errors()}")
@@ -133,6 +147,34 @@ async def trigger_analysis_alternative(req: TriggerRequest):
     # Alternate endpoint mapping to support both specs
     logger.info(f"Received trigger request on alternative route for analysis: {req.analysisId}")
     return await trigger_analysis_api(req)
+
+@app.get("/metrics")
+def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+class EvalRequest(BaseModel):
+    text: str
+    perspectives: List[str] = []
+    llm_api_key: Optional[str] = None
+
+
+@app.post("/api/eval/generate")
+async def eval_generate(req: EvalRequest):
+    start = time.time()
+    raw_output = await call_llm(req.text, req.perspectives, "", req.llm_api_key)
+    duration_s = time.time() - start
+    token_count = len(req.text.split()) + len(str(raw_output).split())
+
+    LLM_TOKEN_COUNTER.labels(service="llm").inc(token_count)
+    LLM_REQUEST_DURATION.labels(service="llm").observe(duration_s)
+
+    return {
+        "output": raw_output,
+        "token_count": token_count,
+        "duration_ms": int(duration_s * 1000)
+    }
+
 
 @app.get("/health")
 async def health_check():

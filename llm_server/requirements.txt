@@ -6,3 +6,4 @@ python-docx>=0.8.11
 litellm>=1.0.0
 python-dotenv>=1.0.0
 boto3>=1.26.0
+prometheus_client>=0.20.0
