@@ -105,20 +105,24 @@
     {
       "id": 5,
       "type": "row",
-      "title": "테스트 커버리지",
+      "title": "생성 품질 유사도 (참조 테스트케이스 대비)",
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
       "collapsed": false
     },
     {
       "id": 6,
-      "type": "gauge",
-      "title": "Backend 커버리지",
+      "type": "bargauge",
+      "title": "LLM 생성 유사도 (참조 대비)",
+      "description": "LLM 생성 테스트케이스와 OpenAI 참조 테스트케이스 간 임베딩 코사인 유사도",
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 10 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "options": {
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
       "targets": [
         {
-          "expr": "eval_coverage_backend{job=\"eval_runner\"}",
-          "legendFormat": "backend"
+          "expr": "eval_similarity{job=\"eval_runner\",mode=\"llm\"}",
+          "legendFormat": "LLM"
         }
       ],
       "fieldConfig": {
@@ -130,7 +134,7 @@
             "steps": [
               { "color": "red", "value": 0 },
               { "color": "yellow", "value": 0.5 },
-              { "color": "green", "value": 0.8 }
+              { "color": "green", "value": 0.75 }
             ]
           }
         }
@@ -138,14 +142,18 @@
     },
     {
       "id": 7,
-      "type": "gauge",
-      "title": "RAG Server 커버리지",
+      "type": "bargauge",
+      "title": "RAG 생성 유사도 (참조 대비)",
+      "description": "RAG 생성 테스트케이스와 OpenAI 참조 테스트케이스 간 임베딩 코사인 유사도",
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 10 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "options": {
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
       "targets": [
         {
-          "expr": "eval_coverage_rag_server{job=\"eval_runner\"}",
-          "legendFormat": "rag-server"
+          "expr": "eval_similarity{job=\"eval_runner\",mode=\"rag\"}",
+          "legendFormat": "RAG"
         }
       ],
       "fieldConfig": {
@@ -157,7 +165,7 @@
             "steps": [
               { "color": "red", "value": 0 },
               { "color": "yellow", "value": 0.5 },
-              { "color": "green", "value": 0.8 }
+              { "color": "green", "value": 0.75 }
             ]
           }
         }
@@ -165,14 +173,22 @@
     },
     {
       "id": 8,
-      "type": "gauge",
-      "title": "LLM Server 커버리지",
+      "type": "bargauge",
+      "title": "LLM vs RAG 유사도 비교",
+      "description": "두 방식의 참조 대비 유사도를 나란히 비교",
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 10 },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "options": {
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
       "targets": [
         {
-          "expr": "eval_coverage_llm_server{job=\"eval_runner\"}",
-          "legendFormat": "llm-server"
+          "expr": "eval_similarity{job=\"eval_runner\",mode=\"llm\"}",
+          "legendFormat": "LLM"
+        },
+        {
+          "expr": "eval_similarity{job=\"eval_runner\",mode=\"rag\"}",
+          "legendFormat": "RAG"
         }
       ],
       "fieldConfig": {
@@ -184,7 +200,7 @@
             "steps": [
               { "color": "red", "value": 0 },
               { "color": "yellow", "value": 0.5 },
-              { "color": "green", "value": 0.8 }
+              { "color": "green", "value": 0.75 }
             ]
           }
         }
