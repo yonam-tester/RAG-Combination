@@ -38,14 +38,17 @@ jobs:
 
       - name: Deploy on EC2
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
+          envs: GH_TOKEN
           script: |
             set -e
             cd /home/ubuntu/app
-            git pull origin main
+            git pull https://x-access-token:$GH_TOKEN@github.com/yonam-tester/RAG-Combination.git main
             docker compose up -d --build backend rag-server llm-server
             docker compose up -d prometheus grafana cadvisor pushgateway
             docker compose restart nginx
