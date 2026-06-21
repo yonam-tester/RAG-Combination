@@ -100,11 +100,11 @@ jobs:
           script: |
             set -e
             cd /home/ubuntu/app
-            pip install -q -r evaluation/requirements.txt
-            COVERAGE_BACKEND=${{ steps.backend_cov.outputs.value }} \
-            COVERAGE_RAG_SERVER=${{ steps.rag_cov.outputs.value }} \
-            COVERAGE_LLM_SERVER=${{ steps.llm_cov.outputs.value }} \
-            LLM_API_KEY=${{ secrets.LLM_API_KEY }} \
+            pip install -q --break-system-packages -r evaluation/requirements.txt
+            COVERAGE_BACKEND="${{ steps.backend_cov.outputs.value }}" \
+            COVERAGE_RAG_SERVER="${{ steps.rag_cov.outputs.value }}" \
+            COVERAGE_LLM_SERVER="${{ steps.llm_cov.outputs.value }}" \
+            LLM_API_KEY="${{ secrets.LLM_API_KEY }}" \
             LLM_SERVER_URL=http://localhost:8001 \
             RAG_SERVER_URL=http://localhost:8000 \
             PUSHGATEWAY_URL=http://localhost:9091 \
