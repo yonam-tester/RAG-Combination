@@ -48,3 +48,16 @@ ai:
 llm:
   provider: ${LLM_PROVIDER:openai}
   direct: ${LLM_DIRECT:false}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus,health
+  endpoint:
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
