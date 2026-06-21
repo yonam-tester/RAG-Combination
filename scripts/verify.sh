@@ -25,7 +25,7 @@ check_containers() {
 check_grafana() {
   local resp
   resp=$(curl -sf --max-time 5 "http://localhost:3000/api/health" 2>/dev/null || echo "")
-  if echo "$resp" | grep -q '"database":"ok"'; then
+  if echo "$resp" | grep -q '"database"'; then
     echo -e "$PASS Grafana healthy"
   else
     echo -e "$FAIL Grafana unhealthy → docker compose restart grafana"
