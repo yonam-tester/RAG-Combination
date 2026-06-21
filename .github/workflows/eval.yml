@@ -100,7 +100,7 @@ jobs:
           script: |
             set -e
             cd /home/ubuntu/app
-            pip install -q --break-system-packages -r evaluation/requirements.txt
+            pip3 install -q --break-system-packages -r evaluation/requirements.txt
             COVERAGE_BACKEND="${{ steps.backend_cov.outputs.value }}" \
             COVERAGE_RAG_SERVER="${{ steps.rag_cov.outputs.value }}" \
             COVERAGE_LLM_SERVER="${{ steps.llm_cov.outputs.value }}" \
