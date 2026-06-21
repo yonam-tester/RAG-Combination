@@ -1,0 +1,111 @@
+name: Evaluate LLM vs RAG
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test-and-evaluate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Run backend tests with JaCoCo
+        working-directory: backend
+        run: mvn test jacoco:report --no-transfer-progress -q
+        continue-on-error: true
+
+      - name: Parse backend coverage
+        id: backend_cov
+        run: |
+          COV=$(python3 -c "
+          import xml.etree.ElementTree as ET
+          try:
+              tree = ET.parse('backend/target/site/jacoco/jacoco.xml')
+              root = tree.getroot()
+              counter = next(c for c in root.findall('counter') if c.get('type') == 'INSTRUCTION')
+              missed = int(counter.get('missed'))
+              covered = int(counter.get('covered'))
+              total = missed + covered
+              print(round(covered / total, 4) if total else 0)
+          except Exception:
+              print(0)
+          ")
+          echo "value=$COV" >> $GITHUB_OUTPUT
+
+      - name: Setup Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Run RAG server tests with pytest-cov
+        working-directory: rag_server
+        run: |
+          pip install -q pytest pytest-cov httpx python-dotenv
+          pip install -q -r requirements.txt
+          pytest --cov=. --cov-report=xml -q || true
+
+      - name: Parse RAG server coverage
+        id: rag_cov
+        run: |
+          COV=$(python3 -c "
+          import xml.etree.ElementTree as ET
+          try:
+              tree = ET.parse('rag_server/coverage.xml')
+              root = tree.getroot()
+              rate = float(root.get('line-rate', 0))
+              print(round(rate, 4))
+          except Exception:
+              print(0)
+          ")
+          echo "value=$COV" >> $GITHUB_OUTPUT
+
+      - name: Run LLM server tests with pytest-cov
+        working-directory: llm_server
+        run: |
+          pip install -q pytest pytest-cov httpx python-dotenv
+          pip install -q -r requirements.txt
+          pytest --cov=. --cov-report=xml -q || true
+
+      - name: Parse LLM server coverage
+        id: llm_cov
+        run: |
+          COV=$(python3 -c "
+          import xml.etree.ElementTree as ET
+          try:
+              tree = ET.parse('llm_server/coverage.xml')
+              root = tree.getroot()
+              rate = float(root.get('line-rate', 0))
+              print(round(rate, 4))
+          except Exception:
+              print(0)
+          ")
+          echo "value=$COV" >> $GITHUB_OUTPUT
+
+      - name: Copy eval script to EC2 and run evaluation
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/ubuntu/app
+            pip install -q -r evaluation/requirements.txt
+            COVERAGE_BACKEND=${{ steps.backend_cov.outputs.value }} \
+            COVERAGE_RAG_SERVER=${{ steps.rag_cov.outputs.value }} \
+            COVERAGE_LLM_SERVER=${{ steps.llm_cov.outputs.value }} \
+            LLM_API_KEY=${{ secrets.LLM_API_KEY }} \
+            LLM_SERVER_URL=http://localhost:8001 \
+            RAG_SERVER_URL=http://localhost:8000 \
+            PUSHGATEWAY_URL=http://localhost:9091 \
+            python3 evaluation/eval_runner.py

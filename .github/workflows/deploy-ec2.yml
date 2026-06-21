@@ -46,6 +46,7 @@ jobs:
             set -e
             cd /home/ubuntu/app
             git pull origin main
-            docker compose up -d --build backend rag-server
+            docker compose up -d --build backend rag-server llm-server
+            docker compose up -d prometheus grafana cadvisor pushgateway
             docker compose restart nginx
             docker image prune -f
