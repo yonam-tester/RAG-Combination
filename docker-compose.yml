@@ -58,6 +58,96 @@ services:
       - yeonam-network
     restart: always
 
+  llm-server:
+    build:
+      context: ./llm_server
+      dockerfile: Dockerfile
+    container_name: yeonam-llm
+    ports:
+      - "8001:8000"
+    expose:
+      - "8000"
+    env_file:
+      - .env
+    networks:
+      - yeonam-network
+    restart: always
+    labels:
+      app: yeonam
+      component: llm-server
+      phase: "1"
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: yeonam-prometheus
+    expose:
+      - "9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=30d'
+    networks:
+      - yeonam-network
+    restart: always
+    labels:
+      app: yeonam
+      component: prometheus
+      phase: "1"
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: yeonam-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    networks:
+      - yeonam-network
+    restart: always
+    labels:
+      app: yeonam
+      component: grafana
+      phase: "1"
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: yeonam-cadvisor
+    expose:
+      - "8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - yeonam-network
+    restart: always
+    labels:
+      app: yeonam
+      component: cadvisor
+      phase: "1"
+
+  pushgateway:
+    image: prom/pushgateway:v1.8.0
+    container_name: yeonam-pushgateway
+    ports:
+      - "9091:9091"
+    networks:
+      - yeonam-network
+    restart: always
+    labels:
+      app: yeonam
+      component: pushgateway
+      phase: "1"
+
 networks:
   yeonam-network:
     driver: bridge
@@ -65,3 +155,5 @@ networks:
 volumes:
   backend_data:
   minio_data:
+  prometheus_data:
+  grafana_data:
