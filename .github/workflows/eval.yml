@@ -100,7 +100,8 @@ jobs:
           script: |
             set -e
             cd /home/ubuntu/app
-            pip3 install -q --break-system-packages -r evaluation/requirements.txt
+            python3 -m ensurepip --upgrade 2>/dev/null || sudo apt-get install -y python3-pip -q
+            python3 -m pip install -q --break-system-packages -r evaluation/requirements.txt
             COVERAGE_BACKEND="${{ steps.backend_cov.outputs.value }}" \
             COVERAGE_RAG_SERVER="${{ steps.rag_cov.outputs.value }}" \
             COVERAGE_LLM_SERVER="${{ steps.llm_cov.outputs.value }}" \
