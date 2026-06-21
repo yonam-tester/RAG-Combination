@@ -47,19 +47,25 @@ def keyword_accuracy(output: str, keywords: list[str]) -> float:
 
 
 def judge_score(requirement: str, output: str, judge_prompt_template: str) -> float:
-    """LLM-as-Judge: rag_server 엔드포인트를 채점 모델로 재사용."""
+    """LLM-as-Judge: OpenAI API 직접 호출로 채점 (서버 파이프라인 우회)."""
     if not output.strip():
         return 0.0
     prompt = judge_prompt_template.replace("{requirement}", requirement).replace("{output}", output[:2000])
     try:
         response = httpx.post(
-            f"{LLM_SERVER_URL}/api/eval/generate",
-            json={"text": prompt, "perspectives": [], "llm_api_key": LLM_API_KEY},
-            timeout=120.0
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {LLM_API_KEY}"},
+            json={
+                "model": "gpt-4o-mini",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.1,
+                "max_tokens": 50,
+            },
+            timeout=30.0,
         )
         response.raise_for_status()
-        raw = response.json().get("output", "")
-        for line in str(raw).splitlines():
+        raw = response.json()["choices"][0]["message"]["content"] or ""
+        for line in raw.splitlines():
             if line.startswith("SCORE:"):
                 score = float(line.split(":")[1].strip())
                 return min(max(score, 0.0), 10.0)
