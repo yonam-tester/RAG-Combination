@@ -29,7 +29,7 @@ def call_service(url: str, text: str, perspectives: list[str]) -> dict:
         response = httpx.post(
             f"{url}/api/eval/generate",
             json={"text": text, "perspectives": perspectives, "llm_api_key": LLM_API_KEY},
-            timeout=120.0
+            timeout=120.0,
         )
         response.raise_for_status()
         return response.json()
@@ -74,6 +74,41 @@ def judge_score(requirement: str, output: str, judge_prompt_template: str) -> fl
     return 0.0
 
 
+def get_embedding(text: str) -> list[float]:
+    """OpenAI text-embedding-3-small으로 텍스트 벡터화."""
+    resp = httpx.post(
+        "https://api.openai.com/v1/embeddings",
+        headers={"Authorization": f"Bearer {LLM_API_KEY}"},
+        json={"model": "text-embedding-3-small", "input": text[:8000]},
+        timeout=30.0,
+    )
+    resp.raise_for_status()
+    return resp.json()["data"][0]["embedding"]
+
+
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    """numpy 없이 코사인 유사도 계산."""
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = sum(x * x for x in a) ** 0.5
+    norm_b = sum(x * x for x in b) ** 0.5
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return round(dot / (norm_a * norm_b), 4)
+
+
+def embedding_similarity(generated: str, reference: str) -> float:
+    """생성 결과와 참조 테스트케이스 간 코사인 유사도 (0~1)."""
+    if not generated.strip() or not reference.strip():
+        return 0.0
+    try:
+        vec_gen = get_embedding(generated)
+        vec_ref = get_embedding(reference)
+        return cosine_similarity(vec_gen, vec_ref)
+    except Exception as e:
+        print(f"Embedding similarity failed: {e}")
+        return 0.0
+
+
 def push_metrics(
     llm_accuracy: float,
     rag_accuracy: float,
@@ -81,30 +116,30 @@ def push_metrics(
     rag_judge: float,
     llm_tokens: float,
     rag_tokens: float,
-    coverage_backend: float,
-    coverage_rag: float,
-    coverage_llm: float,
+    llm_similarity: float,
+    rag_similarity: float,
 ) -> None:
     registry = CollectorRegistry()
 
-    # 같은 이름의 Gauge는 한 번만 생성 후 labels()로 각 값 설정
-    accuracy_gauge = Gauge('eval_accuracy', 'Keyword matching accuracy', ['mode'], registry=registry)
-    accuracy_gauge.labels(mode='llm').set(llm_accuracy)
-    accuracy_gauge.labels(mode='rag').set(rag_accuracy)
+    accuracy_gauge = Gauge("eval_accuracy", "Keyword matching accuracy", ["mode"], registry=registry)
+    accuracy_gauge.labels(mode="llm").set(llm_accuracy)
+    accuracy_gauge.labels(mode="rag").set(rag_accuracy)
 
-    judge_gauge = Gauge('eval_judge_score', 'LLM-as-Judge score (0-10)', ['mode'], registry=registry)
-    judge_gauge.labels(mode='llm').set(llm_judge)
-    judge_gauge.labels(mode='rag').set(rag_judge)
+    judge_gauge = Gauge("eval_judge_score", "LLM-as-Judge score (0-10)", ["mode"], registry=registry)
+    judge_gauge.labels(mode="llm").set(llm_judge)
+    judge_gauge.labels(mode="rag").set(rag_judge)
 
-    token_gauge = Gauge('eval_token_count', 'Average token count per call', ['mode'], registry=registry)
-    token_gauge.labels(mode='llm').set(llm_tokens)
-    token_gauge.labels(mode='rag').set(rag_tokens)
+    token_gauge = Gauge("eval_token_count", "Average token count per call", ["mode"], registry=registry)
+    token_gauge.labels(mode="llm").set(llm_tokens)
+    token_gauge.labels(mode="rag").set(rag_tokens)
 
-    Gauge('eval_coverage_backend', 'Backend test coverage (0-1)', registry=registry).set(coverage_backend)
-    Gauge('eval_coverage_rag_server', 'RAG server test coverage (0-1)', registry=registry).set(coverage_rag)
-    Gauge('eval_coverage_llm_server', 'LLM server test coverage (0-1)', registry=registry).set(coverage_llm)
+    similarity_gauge = Gauge(
+        "eval_similarity", "참조 테스트케이스와의 임베딩 코사인 유사도", ["mode"], registry=registry
+    )
+    similarity_gauge.labels(mode="llm").set(llm_similarity)
+    similarity_gauge.labels(mode="rag").set(rag_similarity)
 
-    push_to_gateway(PUSHGATEWAY_URL, job='eval_runner', registry=registry)
+    push_to_gateway(PUSHGATEWAY_URL, job="eval_runner", registry=registry)
     print(f"Metrics pushed to {PUSHGATEWAY_URL}")
 
 
@@ -112,18 +147,16 @@ def main():
     cases = load_cases()
     judge_prompt = load_judge_prompt()
 
-    coverage_backend = float(os.getenv("COVERAGE_BACKEND", "0"))
-    coverage_rag = float(os.getenv("COVERAGE_RAG_SERVER", "0"))
-    coverage_llm = float(os.getenv("COVERAGE_LLM_SERVER", "0"))
-
     llm_accuracies, rag_accuracies = [], []
     llm_judges, rag_judges = [], []
     llm_tokens, rag_tokens = [], []
+    llm_similarities, rag_similarities = [], []
 
     for case in cases:
         print(f"Evaluating {case['id']}...")
         text = case["input_doc"]
         keywords = case["expected_keywords"]
+        reference = case.get("reference_test_case", "")
 
         time.sleep(5)  # 메모리 제한 EC2에서 서버 GC 대기
         llm_result = call_service(LLM_SERVER_URL, text, [])
@@ -142,8 +175,13 @@ def main():
         llm_tokens.append(llm_result["token_count"])
         rag_tokens.append(rag_result["token_count"])
 
-        print(f"  LLM accuracy={llm_acc:.2f} judge={llm_j:.1f} tokens={llm_result['token_count']}")
-        print(f"  RAG accuracy={rag_acc:.2f} judge={rag_j:.1f} tokens={rag_result['token_count']}")
+        llm_sim = embedding_similarity(llm_result["output"], reference)
+        rag_sim = embedding_similarity(rag_result["output"], reference)
+        llm_similarities.append(llm_sim)
+        rag_similarities.append(rag_sim)
+
+        print(f"  LLM accuracy={llm_acc:.2f} judge={llm_j:.1f} sim={llm_sim:.3f} tokens={llm_result['token_count']}")
+        print(f"  RAG accuracy={rag_acc:.2f} judge={rag_j:.1f} sim={rag_sim:.3f} tokens={rag_result['token_count']}")
 
     avg = lambda lst: round(sum(lst) / len(lst), 4) if lst else 0.0
 
@@ -154,14 +192,14 @@ def main():
         rag_judge=avg(rag_judges),
         llm_tokens=avg(llm_tokens),
         rag_tokens=avg(rag_tokens),
-        coverage_backend=coverage_backend,
-        coverage_rag=coverage_rag,
-        coverage_llm=coverage_llm,
+        llm_similarity=avg(llm_similarities),
+        rag_similarity=avg(rag_similarities),
     )
 
     print("\n=== 요약 ===")
     print(f"정확도:    LLM {avg(llm_accuracies):.2%} vs RAG {avg(rag_accuracies):.2%}")
     print(f"Judge 점수: LLM {avg(llm_judges):.1f} vs RAG {avg(rag_judges):.1f}")
+    print(f"유사도:    LLM {avg(llm_similarities):.3f} vs RAG {avg(rag_similarities):.3f}")
     print(f"토큰 수:   LLM {avg(llm_tokens):.0f} vs RAG {avg(rag_tokens):.0f}")
 
 
