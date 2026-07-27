@@ -4,7 +4,7 @@
 
 **Goal:** `rag_server`의 자체 구현 FAISS 인메모리 벡터 파이프라인을 LangChain 표준 컴포넌트 + Qdrant(외부 영속 벡터DB)로 교체하고, `MOCK_RAG` 폴백 경로를 완전히 제거한다.
 
-**Architecture:** 벡터 인덱스를 `rag-server` 프로세스 메모리에서 독립 Qdrant 컨테이너(named volume 영속)로 이전한다. 문서 청크와 정적 QA 지식카드를 `yeonam_knowledge` 단일 컬렉션에 `source_type` payload로 구분해 저장하고, 검색은 `QdrantVectorStore` 한 번의 유사도 호출로 통합한다. LLM 호출은 LCEL 체인(`ChatLiteLLM → JsonOutputParser → 필드 보정`)으로 재구성하되 외부 API 계약(webhook payload, 엔드포인트 응답 스키마)은 변경하지 않는다.
+**Architecture:** 벡터 인덱스를 `rag-server` 프로세스 메모리에서 독립 Qdrant 컨테이너(named volume 영속)로 이전한다. 문서 청크와 정적 QA 지식카드를 `yeonam_knowledge` 단일 컬렉션에 `source_type` payload로 구분해 저장하고, 검색은 `QdrantVectorStore` 한 번의 유사도 호출로 통합한다. LLM 호출은 LCEL 체인(`litellm.acompletion → JsonOutputParser → 필드 보정`)으로 재구성하되 외부 API 계약(webhook payload, 엔드포인트 응답 스키마)은 변경하지 않는다.
 
 **Tech Stack:** Python 3.10 / FastAPI / LangChain (`langchain-core`, `langchain-text-splitters`, `langchain-qdrant`, `langchain-huggingface`) / Qdrant / sentence-transformers (`all-MiniLM-L6-v2`) / litellm / pytest / Docker Compose
 
@@ -19,8 +19,8 @@
 | 1 | LCEL 체인의 LLM 단계로 `ChatLiteLLM`(`langchain-community`) 사용 | `ChatLiteLLM`을 쓰지 않고 `litellm.acompletion`을 `RunnableLambda`로 감싸 체인에 넣는다 | 두 단계로 확인된 문제다. ① `langchain-community` 저장소는 2026-06-19 아카이브되어 sunset 되었고 `ChatLiteLLM`은 `langchain-litellm`으로 이관됐다. ② 그런데 `langchain-litellm`은 전 버전이 `litellm>=1.65.1`, 0.5.0+ 는 `httpx>=0.28.1`을 요구하는데 이 프로젝트는 `litellm==1.40.11`/`httpx==0.27.0`에 고정돼 있다(pip `ResolutionImpossible`로 확인). 이를 맞추려면 litellm을 37개 마이너 버전 점프시켜야 하고, litellm을 직접 호출하는 범위 밖 모듈 3개(`document_parser.py`, `requirement_extractor.py`, `llm_server`)와 `litellm.exceptions.AuthenticationError` 처리까지 재검증해야 한다. `RunnableLambda` 래핑은 LCEL 체인 구조(프롬프트 → LLM → `JsonOutputParser` → 필드 보정)와 설계 의도를 그대로 유지하면서 기존 핀을 하나도 건드리지 않는다(해상도 검증 완료). 잃는 것은 `ChatLiteLLM` 클래스의 streaming/callbacks인데, 이 용도(단발 비스트리밍 JSON 호출)에는 쓰이지 않는다. **사용자 승인 후 진행(2026-07-27).** |
 | 2 | `as_retriever(search_kwargs={"k":5,"score_threshold":0.35})` | `similarity_search_with_score(query, k=...)` 후 파이썬 측에서 threshold 필터 | `as_retriever`는 `List[Document]`만 반환해 score를 잃는다. 그런데 score는 기존 외부 계약(`evidence_list[].score`, `pipelineTrace[].topScore`, `build_prompt`의 `<evidence score=...>`)에 그대로 노출되므로 반드시 보존해야 한다. `similarity_score_threshold` retriever가 내부적으로 호출하는 것과 동일한 API를 직접 쓰는 것이라 검색 의미론은 동일하다. |
 | 3 | 단위 테스트에 `InMemoryVectorStore` + `FakeEmbeddings` | `QdrantClient(location=":memory:")` 로컬 모드 + `DeterministicFakeEmbedding` | `qdrant-client`는 서버 없이 동작하는 로컬 모드를 내장한다. `InMemoryVectorStore`와 달리 payload 필터 삭제(`delete_by_file_id`)까지 실제 코드 경로로 검증할 수 있어 커버리지가 넓다. 컨테이너 불필요라는 명세서의 목적은 동일하게 달성된다. |
-| 5 | (명세서에 언급 없음) | 로컬 개발 venv를 **Python 3.12**로 만든다 (프로덕션 의존성은 무변경) | 개발 머신의 기본 `python3`가 3.13인데, 이 프로젝트의 2024년대 핀들(`pydantic==2.7.4`, `pymupdf==1.24.5`)은 cp313 휠이 없어 소스 빌드로 넘어가 실패한다. 핀을 하나씩 올리면 프로덕션 의존성이 계속 바뀌므로 대신 인터프리터를 맞췄다(`brew install python@3.12`). 3.12에서는 **기존 핀 전부가 수정 없이 설치·import된다**(검증 완료). 결과적으로 이 리팩토링은 프로덕션 의존성을 하나도 바꾸지 않는다. **사용자 승인 후 진행(2026-07-27).** |
 | 4 | payload 필드명 `source_name` | payload 필드명 `file_name` | 기존 `text_chunker.chunk_document`가 이미 `file_name` 키를 쓰고 있어 그대로 잇는 편이 마이그레이션이 단순하다. evidence dict로 나갈 때 `source_name`으로 매핑되므로 **외부 계약은 명세서 그대로**다. 컬렉션 payload 내부 이름만 다르다. |
+| 5 | (명세서에 언급 없음) | 로컬 개발 venv를 **Python 3.12**로 만든다 (프로덕션 의존성은 무변경) | 개발 머신의 기본 `python3`가 3.13인데, 이 프로젝트의 2024년대 핀들(`pydantic==2.7.4`, `pymupdf==1.24.5`)은 cp313 휠이 없어 소스 빌드로 넘어가 실패한다. 핀을 하나씩 올리면 프로덕션 의존성이 계속 바뀌므로 대신 인터프리터를 맞췄다(`brew install python@3.12`). 3.12에서는 **기존 핀 전부가 수정 없이 설치·import된다**(검증 완료). 결과적으로 이 리팩토링은 프로덕션 의존성을 하나도 바꾸지 않는다. **사용자 승인 후 진행(2026-07-27).** |
 
 ## 운영 리스크 (구현 전 반드시 인지할 것)
 
@@ -255,7 +255,7 @@ git commit -m "feat: Qdrant 벡터DB 컨테이너 및 환경변수 추가
 
 **Interfaces:**
 - Consumes: 없음
-- Produces: 이후 모든 태스크가 import 가능해지는 패키지 — `langchain_core`, `langchain_text_splitters`, `langchain_qdrant.QdrantVectorStore`, `langchain_huggingface.HuggingFaceEmbeddings`, `langchain_litellm.ChatLiteLLM`, `qdrant_client`.
+- Produces: 이후 모든 태스크가 import 가능해지는 패키지 — `langchain_core`, `langchain_text_splitters`, `langchain_qdrant.QdrantVectorStore`, `langchain_huggingface.HuggingFaceEmbeddings`, `qdrant_client`. LLM 호출용 별도 LangChain 패키지는 추가하지 않는다 — 기존 `litellm`을 `RunnableLambda`로 감싸 쓴다(의도적 편차 #1 참고).
 
 - [ ] **Step 1: `requirements.txt` 교체**
 
@@ -396,7 +396,6 @@ git commit -m "chore: LangChain+Qdrant 의존성 스택으로 교체
 - langchain-core/text-splitters/qdrant/huggingface/litellm, qdrant-client 추가
 - ChatLiteLLM 미채택: langchain-litellm이 litellm>=1.65/httpx>=0.28을 요구해
   기존 핀과 충돌하므로 litellm.acompletion을 RunnableLambda로 래핑 (Task 7)
-- pymupdf 1.24.5 -> 1.26.3: 1.24.5는 cp313 휠이 없어 로컬 설치 불가 (abi3 휠로 교체)
 - 프로덕션도 실임베딩을 수행하므로 requirements.prod.txt에 동일 스택 반영,
   CPU 전용 torch 휠 인덱스로 이미지 크기 억제"
 ```
