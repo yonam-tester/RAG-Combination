@@ -7,6 +7,14 @@ from langchain_core.documents import Document
 import ingestion
 import vector_store
 
+# qdrant-client 로컬 모드(:memory:)는 payload 인덱스를 지원하지 않아
+# ensure_collection의 create_payload_index 호출 시 UserWarning을 낸다.
+# 실제 서버 Qdrant에서는 인덱스가 정상 동작하므로 이 경고는 테스트 환경에서만
+# 발생하는 무해한 잡음이다.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:Payload indexes have no effect in the local Qdrant.*:UserWarning"
+)
+
 
 def test_load_documents_from_jsonl_prefers_rag_chunks(tmp_path, monkeypatch):
     jsonl = tmp_path / "rag_chunks.jsonl"
