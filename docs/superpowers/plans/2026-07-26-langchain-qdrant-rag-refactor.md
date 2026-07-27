@@ -774,6 +774,8 @@ git commit -m "feat: Qdrant 벡터 스토어 접근 계층 vector_store.py 추�
   ```
   **반환 타입이 `list[dict]`에서 `list[Document]`로 바뀐다.** `chunk_id`는 `f"CHNK-{file_id}-{index:04d}"` 형식의 결정적 값이라 같은 파일을 재처리하면 동일 point를 덮어쓴다.
 
+> **구현 중 발견된 기존 버그:** `clean_text`는 빈 줄을 모두 제거하고 단일 `\n`으로 이어붙이므로 그 출력에는 `"\n\n"`이 존재할 수 없다. 따라서 리팩토링 이전 `chunk_document`의 `cleaned_text.split('\n\n')`도 항상 단일 문단만 반환했고, **문단 단위 섹션 제목 추적은 실제로는 한 번도 동작한 적이 없다**. 이번 태스크에서 원문을 먼저 문단 분할한 뒤 문단별로 `clean_text`를 적용하도록 바로잡았다.
+
 - [ ] **Step 1: 실패하는 테스트 작성**
 
 Create `rag_server/test_text_chunker.py`:
@@ -854,7 +856,7 @@ Expected: `ImportError: cannot import name 'build_section_documents' from 'text_
 
 - [ ] **Step 3: `text_chunker.py` 구현**
 
-`rag_server/text_chunker.py` 전체를 아래로 교체한다. `clean_text`와 `detect_section_title` 본문은 기존과 완전히 동일하다.
+`rag_server/text_chunker.py` 전체를 아래로 교체한다. `clean_text`와 `detect_section_title`은 **동작이 기존과 동일해야 한다**(도메인 로직 불변). 빈 줄의 트레일링 공백처럼 동작에 영향 없는 차이는 허용한다.
 
 ```python
 import logging
@@ -923,13 +925,16 @@ def build_section_documents(raw_text: str, file_id: str, file_name: str) -> List
     노이즈를 제거하고 문단 단위로 순회하며 현재 섹션 제목을 추적해,
     각 문단을 섹션 메타데이터가 붙은 Document로 만든다.
     길이 기반 분할은 여기서 하지 않는다 — chunk_document가 splitter로 처리한다.
+
+    주의: clean_text()는 빈 줄을 전부 제거하고 단일 "\\n"으로 다시 이어붙이므로
+    그 출력에는 문단 구분자("\\n\\n")가 남지 않는다. 따라서 문단 경계는 원본
+    raw_text에서 먼저 나눈 뒤, 각 문단을 개별적으로 clean_text에 통과시킨다.
     """
-    cleaned = clean_text(raw_text)
     documents: List[Document] = []
     current_section = "General"
 
-    for paragraph in cleaned.split("\n\n"):
-        paragraph = paragraph.strip()
+    for raw_paragraph in re.split(r'\n\s*\n', raw_text):
+        paragraph = clean_text(raw_paragraph).strip()
         if not paragraph:
             continue
 
