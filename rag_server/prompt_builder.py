@@ -1,10 +1,12 @@
-import os
-import json
-import logging
 import asyncio
+import logging
+import os
 import re
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
+
 import litellm
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.runnables import Runnable, RunnableLambda
 
 logger = logging.getLogger("rag_server.prompt_builder")
 
@@ -121,81 +123,100 @@ def build_prompt(req_text: str, evidences: List[Dict], custom_prompt: str, persp
 
     return prompt
 
+# LLM이 누락한 필드를 보정하는 기본값. 리포트 렌더링이 빈 필드로 깨지지 않게 한다.
+_FIELD_FALLBACKS = {
+    "precondition": "추가 검토 필요 (기본값 설정됨)",
+    "testSteps": "1. 추가 검토 필요 (단계 자동 보정)",
+    "expectedResult": "추가 검토 필요 (결과 자동 보정)",
+    "testCaseId": "TC-AUTOGEN",
+    "priority": "MEDIUM",
+    "confidenceLevel": "MEDIUM",
+    "caution": "추가 검토 필요 (가정에 의존한 테스트이므로 실행 시 주의 요망)",
+}
+
+
+def _apply_field_fallbacks(test_cases) -> List[Dict]:
+    """JsonOutputParser 출력에 필수 필드 기본값을 채운다."""
+    if not isinstance(test_cases, list):
+        raise ValueError(f"LLM 응답이 JSON 배열이 아닙니다: {type(test_cases).__name__}")
+
+    for test_case in test_cases:
+        for field, default in _FIELD_FALLBACKS.items():
+            if not test_case.get(field):
+                test_case[field] = default
+        if not test_case.get("riskTags"):
+            test_case["riskTags"] = ["#추가_검토"]
+
+    return test_cases
+
+
+def _pick_mock_test_cases(prompt: str) -> List[Dict]:
+    """MOCK_LLM 모드에서 프롬프트의 요구사항 텍스트로 mock 세트를 고른다."""
+    match = re.search(r'<target_requirement>\s*(.*?)\s*</target_requirement>', prompt, re.DOTALL)
+    if match:
+        req_text = match.group(1).strip()
+        if "업로드" in req_text:
+            return MOCK_TEST_CASES["REQ-002"]
+    return MOCK_TEST_CASES["REQ-001"]
+
+
+async def _acall_litellm(prompt: str, llm_api_key: Optional[str] = None) -> str:
+    """LCEL 체인의 LLM 단계. litellm을 직접 호출하고 원문 문자열을 반환한다.
+
+    ChatLiteLLM을 쓰지 않는 이유는 계획 문서의 '의도적 편차' #1 참고 —
+    langchain-litellm이 litellm>=1.65/httpx>=0.28을 요구해 기존 핀과 충돌한다.
+    """
+    kwargs = {
+        "model": os.getenv("LLM_MODEL", "gpt-4o-mini"),
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.2,
+    }
+    if llm_api_key and llm_api_key.strip():
+        kwargs["api_key"] = llm_api_key.strip()
+
+    response = await litellm.acompletion(**kwargs)
+    return response.choices[0].message.content
+
+
+def build_chain(llm_api_key: Optional[str] = None) -> Runnable:
+    """프롬프트 문자열을 받아 테스트케이스 목록을 내는 LCEL 체인을 만든다.
+
+    체인 구성: 프롬프트 문자열 -> litellm 호출 -> JsonOutputParser -> 필드 보정
+    비동기 전용 체인이다. `ainvoke`로만 실행한다.
+    """
+    if llm_api_key and llm_api_key.strip():
+        logger.info("Applying dynamic user-provided LLM API key for generation.")
+
+    async def call_llm(prompt: str) -> str:
+        return await _acall_litellm(prompt, llm_api_key)
+
+    return (
+        RunnableLambda(call_llm)
+        | JsonOutputParser()
+        | RunnableLambda(_apply_field_fallbacks)
+    )
+
+
 async def call_llm_with_key(prompt: str, llm_api_key: Optional[str] = None) -> List[Dict]:
     """
-    Calls LiteLLM with prompt. Supports user dynamic API Key injection.
+    Calls LiteLLM with prompt via an LCEL chain. Supports user dynamic API Key injection.
     Falls back to mock data if MOCK_LLM=true.
     """
-    mock_llm = os.getenv("MOCK_LLM", "true").lower() == "true"
-    
-    if mock_llm:
+    if os.getenv("MOCK_LLM", "true").lower() == "true":
         logger.info("MOCK_LLM is enabled. Returning mock test cases.")
         await asyncio.sleep(1.0)
-        # Parse requirement ID from prompt to match mock
-        req_id = "REQ-001"
-        req_id_match = re.search(r'<target_requirement>\s*(.*?)\s*</target_requirement>', prompt, re.DOTALL)
-        if req_id_match:
-            req_text = req_id_match.group(1).strip()
-            for rid, rlist in MOCK_TEST_CASES.items():
-                # Just mock match based on keywords
-                if "URL" in req_text and rid == "REQ-001":
-                    req_id = "REQ-001"
-                elif "업로드" in req_text and rid == "REQ-002":
-                    req_id = "REQ-002"
-        return MOCK_TEST_CASES.get(req_id, MOCK_TEST_CASES["REQ-001"])
+        return _pick_mock_test_cases(prompt)
 
-    model = os.getenv("LLM_MODEL", "gpt-4o-mini")
-    logger.info(f"Calling real LLM model for RAG testcase generation: {model}")
-    
+    logger.info(f"Calling real LLM model for RAG testcase generation: {os.getenv('LLM_MODEL', 'gpt-4o-mini')}")
+
     try:
-        kwargs = {
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.2
-        }
-        if llm_api_key and llm_api_key.strip():
-            kwargs["api_key"] = llm_api_key.strip()
-            logger.info("Applying dynamic user-provided LLM API key for generation.")
-            
-        response = await litellm.acompletion(**kwargs)
-        raw_content = response.choices[0].message.content.strip()
-        
-        # Parse JSON block
-        json_match = re.search(r'```json\s*(.*?)\s*```', raw_content, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(1)
-        else:
-            json_str = raw_content
-            
-        test_cases = json.loads(json_str)
-        
-        # Validate and Apply Fallbacks for required fields
-        if isinstance(test_cases, list):
-            for tc in test_cases:
-                # Apply fallbacks
-                if not tc.get("precondition"):
-                    tc["precondition"] = "추가 검토 필요 (기본값 설정됨)"
-                if not tc.get("testSteps"):
-                    tc["testSteps"] = "1. 추가 검토 필요 (단계 자동 보정)"
-                if not tc.get("expectedResult"):
-                    tc["expectedResult"] = "추가 검토 필요 (결과 자동 보정)"
-                if not tc.get("testCaseId"):
-                    tc["testCaseId"] = "TC-AUTOGEN"
-                if not tc.get("priority"):
-                    tc["priority"] = "MEDIUM"
-                if not tc.get("confidenceLevel"):
-                    tc["confidenceLevel"] = "MEDIUM"
-                if not tc.get("riskTags"):
-                    tc["riskTags"] = ["#추가_검토"]
-                if not tc.get("caution"):
-                    tc["caution"] = "추가 검토 필요 (가정에 의존한 테스트이므로 실행 시 주의 요망)"
-                    
-            return test_cases
-            
+        return await build_chain(llm_api_key).ainvoke(prompt)
     except litellm.exceptions.AuthenticationError as e:
         logger.error(f"LiteLLM AuthenticationError caught: {str(e)}")
-        raise e
+        raise
     except Exception as e:
-        logger.error(f"Failed to generate test cases via LLM: {str(e)}. Falling back to mock data.", exc_info=True)
-        
-    return MOCK_TEST_CASES["REQ-001"]
+        logger.error(
+            f"Failed to generate test cases via LLM: {str(e)}. Falling back to mock data.",
+            exc_info=True,
+        )
+        return MOCK_TEST_CASES["REQ-001"]
