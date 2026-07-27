@@ -3,6 +3,7 @@
 **/*.py[cod]
 **/*.pyo
 rag_server/venv/
+rag_server/.venv/
 llm_server/venv/
 
 # Java / Maven
