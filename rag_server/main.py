@@ -13,7 +13,8 @@ from pydantic import BaseModel
 from queue_manager import queue_manager
 from document_parser import process_and_extract
 from text_chunker import chunk_document
-from vector_db_manager import vector_db_manager
+import vector_store
+import ingestion
 from requirement_extractor import extract_requirements
 from retriever import retrieve_evidences
 from prompt_builder import build_prompt, call_llm_with_key
@@ -39,71 +40,56 @@ async def process_job(job_data: dict):
 
     logger.info(f"Worker processing RAG job {analysis_id}")
 
-    mock_rag = os.getenv("MOCK_RAG", "true").lower() == "true"
-
     pipeline_trace = []
 
     try:
-        requirements = []
+        # Step 1: PARSE
+        t0 = time.time()
+        logger.info("Downloading and parsing documents from S3...")
+        parsed_documents = await process_and_extract(s3_paths, llm_api_key)
+        pipeline_trace.append({
+            "step": "PARSE",
+            "status": "SUCCESS",
+            "fileCount": len(parsed_documents),
+            "durationMs": int((time.time() - t0) * 1000)
+        })
+
+        # Step 2: CHUNK
+        t0 = time.time()
+        logger.info("Cleaning and chunking parsed text...")
         chunks = []
+        for doc in parsed_documents:
+            chunks.extend(chunk_document(doc["text"], doc["file_id"], doc["file_name"]))
+        pipeline_trace.append({
+            "step": "CHUNK",
+            "status": "SUCCESS",
+            "chunkCount": len(chunks),
+            "durationMs": int((time.time() - t0) * 1000)
+        })
 
-        if not mock_rag:
-            # Step 1: PARSE
-            t0 = time.time()
-            logger.info("Downloading and parsing documents from S3...")
-            parsed_documents = await process_and_extract(s3_paths, llm_api_key)
-            pipeline_trace.append({
-                "step": "PARSE",
-                "status": "SUCCESS",
-                "fileCount": len(parsed_documents),
-                "durationMs": int((time.time() - t0) * 1000)
-            })
+        # Step 3: INDEX
+        t0 = time.time()
+        logger.info(f"Indexing {len(chunks)} chunks to Qdrant...")
+        vector_store.add_documents(chunks)
+        pipeline_trace.append({
+            "step": "INDEX",
+            "status": "SUCCESS",
+            "vectorCount": len(chunks),
+            "durationMs": int((time.time() - t0) * 1000)
+        })
 
-            # Step 2: CHUNK
-            t0 = time.time()
-            logger.info("Cleaning and chunking parsed text...")
-            for doc in parsed_documents:
-                doc_chunks = chunk_document(doc["text"], doc["file_id"], doc["file_name"])
-                chunks.extend(doc_chunks)
-            pipeline_trace.append({
-                "step": "CHUNK",
-                "status": "SUCCESS",
-                "chunkCount": len(chunks),
-                "durationMs": int((time.time() - t0) * 1000)
-            })
+        # Step 4: EXTRACT
+        t0 = time.time()
+        logger.info("Extracting requirements from document text...")
+        requirements = await extract_requirements(parsed_documents, llm_api_key)
+        pipeline_trace.append({
+            "step": "EXTRACT",
+            "status": "SUCCESS",
+            "reqCount": len(requirements),
+            "durationMs": int((time.time() - t0) * 1000)
+        })
 
-            # Step 3: INDEX
-            t0 = time.time()
-            logger.info(f"Indexing {len(chunks)} chunks to vector database...")
-            vector_db_manager.add_chunks(chunks)
-            pipeline_trace.append({
-                "step": "INDEX",
-                "status": "SUCCESS",
-                "vectorCount": len(chunks),
-                "durationMs": int((time.time() - t0) * 1000)
-            })
-
-            # Step 4: EXTRACT
-            t0 = time.time()
-            logger.info("Extracting requirements from document text...")
-            requirements = await extract_requirements(parsed_documents, llm_api_key)
-            pipeline_trace.append({
-                "step": "EXTRACT",
-                "status": "SUCCESS",
-                "reqCount": len(requirements),
-                "durationMs": int((time.time() - t0) * 1000)
-            })
-        else:
-            logger.info("MOCK_RAG is enabled, skipping S3 download, parsing, chunking, and indexing.")
-            pipeline_trace = [
-                {"step": "PARSE",    "status": "SKIPPED", "durationMs": 0},
-                {"step": "CHUNK",    "status": "SKIPPED", "durationMs": 0},
-                {"step": "INDEX",    "status": "SKIPPED", "durationMs": 0},
-                {"step": "EXTRACT",  "status": "SKIPPED", "durationMs": 0},
-                {"step": "RETRIEVE", "status": "SKIPPED", "durationMs": 0},
-            ]
-            requirements = await extract_requirements([], llm_api_key)
-
+        # Step 5: RETRIEVE + GENERATE
         test_cases = []
         top_score = 0.0
         elapsed_retrieve = 0
@@ -118,11 +104,10 @@ async def process_job(job_data: dict):
             elapsed_retrieve += int((time.time() - t0) * 1000)
             seen_chunk_ids.update(ev["chunk_id"] for ev in evidences)
 
-            if not mock_rag:
-                for ev in evidences:
-                    sc = ev.get("score", 0.0)
-                    if sc is not None and sc > top_score:
-                        top_score = sc
+            for ev in evidences:
+                sc = ev.get("score", 0.0)
+                if sc is not None and sc > top_score:
+                    top_score = sc
 
             limited_evidences = evidences[:3]
 
@@ -146,13 +131,12 @@ async def process_job(job_data: dict):
 
                 test_cases.append(tc)
 
-        if not mock_rag:
-            pipeline_trace.append({
-                "step": "RETRIEVE",
-                "status": "SUCCESS",
-                "topScore": round(top_score, 4),
-                "durationMs": elapsed_retrieve
-            })
+        pipeline_trace.append({
+            "step": "RETRIEVE",
+            "status": "SUCCESS",
+            "topScore": round(top_score, 4),
+            "durationMs": elapsed_retrieve
+        })
 
         formatted_data = {
             "analysisId": analysis_id,
@@ -179,7 +163,11 @@ async def process_job(job_data: dict):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Start background worker
+    # Startup: 지식카드를 Qdrant에 적재한다.
+    # Qdrant 연결이나 임베딩 로드가 실패하면 예외가 전파되어 기동이 실패한다 (fail-fast).
+    count = ingestion.ingest_knowledge_base()
+    logger.info(f"Startup ingestion complete: {count} knowledge documents")
+
     queue_manager.start_worker(process_job)
     yield
     # Shutdown: Stop worker safely
@@ -223,12 +211,6 @@ class PreprocessRequest(BaseModel):
 @app.post("/api/files/preprocess")
 async def preprocess_file_api(req: PreprocessRequest):
     logger.info(f"Received preprocess request for file: {req.fileId}, path: {req.s3Path}")
-    mock_rag = os.getenv("MOCK_RAG", "true").lower() == "true"
-    
-    if mock_rag:
-        logger.info("MOCK_RAG is enabled, skipping preprocessing document download/validation.")
-        return {"status": "success", "fileId": req.fileId, "valid": True}
-        
     try:
         # Preprocess download and check parsing suitability
         await process_and_extract([req.s3Path])
@@ -262,13 +244,8 @@ async def trigger_analysis_alternative(req: TriggerRequest):
 @app.delete("/api/vectors/{fileId}")
 async def delete_vectors_api(fileId: str):
     logger.info(f"Received delete vectors request for fileId: {fileId}")
-    mock_rag = os.getenv("MOCK_RAG", "true").lower() == "true"
-    if mock_rag:
-        logger.info("MOCK_RAG is enabled, skipping vector deletion.")
-        return {"status": "success", "message": f"Vectors for file {fileId} deleted (mocked)."}
-        
     try:
-        vector_db_manager.delete_file_chunks(fileId)
+        vector_store.delete_by_file_id(fileId)
         return {"status": "success", "message": f"Vectors for file {fileId} deleted."}
     except Exception as e:
         logger.error(f"Failed to delete vectors for file {fileId}: {str(e)}")
@@ -294,7 +271,7 @@ async def eval_generate_rag(req: EvalRequest):
 
     parsed_documents = [{"text": req.text, "file_id": "eval-doc", "file_name": "eval.txt"}]
     chunks = chunk_document(req.text, "eval-doc", "eval.txt")
-    vector_db_manager.add_chunks(chunks)
+    vector_store.add_documents(chunks)
 
     requirements = await extract_requirements(parsed_documents, req.llm_api_key)
 
@@ -320,9 +297,13 @@ async def eval_generate_rag(req: EvalRequest):
 
 @app.get("/health")
 async def health_check():
-    return {
-        "status": "healthy",
-        "mock_llm": os.getenv("MOCK_LLM", "true").lower() == "true",
-        "mock_rag": os.getenv("MOCK_RAG", "true").lower() == "true",
-        "queue_size": queue_manager.queue.qsize()
-    }
+    qdrant_up = vector_store.ping()
+    return JSONResponse(
+        status_code=status.HTTP_200_OK if qdrant_up else status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={
+            "status": "healthy" if qdrant_up else "unhealthy",
+            "mock_llm": os.getenv("MOCK_LLM", "true").lower() == "true",
+            "qdrant": "up" if qdrant_up else "down",
+            "queue_size": queue_manager.queue.qsize(),
+        },
+    )

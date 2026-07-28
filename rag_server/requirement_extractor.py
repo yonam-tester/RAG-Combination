@@ -15,13 +15,12 @@ MOCK_REQUIREMENTS = [
 async def extract_requirements(parsed_documents: List[Dict], llm_api_key: Optional[str] = None) -> List[Dict]:
     """
     Extracts testable software requirements from the parsed documents.
-    If MOCK_LLM=true or MOCK_RAG=true, returns MOCK_REQUIREMENTS.
+    If MOCK_LLM=true, returns MOCK_REQUIREMENTS.
     """
     mock_llm = os.getenv("MOCK_LLM", "true").lower() == "true"
-    mock_rag = os.getenv("MOCK_RAG", "true").lower() == "true"
-    
-    if mock_llm or mock_rag or not parsed_documents:
-        logger.info("MOCK_LLM or MOCK_RAG is active, or parsed documents are empty. Returning mock requirements.")
+
+    if mock_llm or not parsed_documents:
+        logger.info("MOCK_LLM is active, or parsed documents are empty. Returning mock requirements.")
         return MOCK_REQUIREMENTS
 
     # Combine document texts for analysis (limit content length if too long)
