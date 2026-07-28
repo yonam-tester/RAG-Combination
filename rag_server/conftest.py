@@ -10,9 +10,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from langchain_core.embeddings import DeterministicFakeEmbedding
 
-os.environ["QDRANT_URL"] = ":memory:"
-os.environ["QDRANT_COLLECTION"] = "yeonam_knowledge_test"
-os.environ["MOCK_LLM"] = "true"
+os.environ.setdefault("QDRANT_URL", ":memory:")
+os.environ.setdefault("QDRANT_COLLECTION", "yeonam_knowledge_test")
+os.environ.setdefault("MOCK_LLM", "true")
 
 # asyncio 큐 워커는 테스트 대상이 아니므로 모듈 단위로 대체한다.
 _qm = MagicMock()
