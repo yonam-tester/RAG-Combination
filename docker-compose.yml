@@ -30,7 +30,7 @@ services:
     restart: always
 
   qdrant:
-    image: qdrant/qdrant:v1.12.4
+    image: qdrant/qdrant:v1.18.0
     container_name: yeonam-qdrant
     expose:
       - "6333"

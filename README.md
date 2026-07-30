@@ -40,10 +40,18 @@
    │ MinIO (:9000)│    │  FastAPI AI Server (:8000)            │
    │ 원본 문서 /  │    │  ┌──────────────┐  ┌───────────────┐ │
    │ 보고서 저장  │    │  │  llm_server  │  │  rag_server   │ │
-   └───────┬──────┘    │  │  (단순 LLM)  │  │  (RAG + FAISS)│ │
-           │           │  └──────────────┘  └───────────────┘ │
-           └───────────│ Document Download                      │
-                       └───────────────────────────────────────┘
+   └───────┬──────┘    │  │  (단순 LLM)  │  │ (LangChain +  │ │
+           │           │  │              │  │   Qdrant RAG) │ │
+           │           │  └──────────────┘  └───────┬───────┘ │
+           └───────────│ Document Download           │         │
+                       └────────────────────────────┼─────────┘
+                                                     │ 벡터 검색
+                                          ┌──────────▼───────────┐
+                                          │  Qdrant (:6333)      │
+                                          │  문서 청크 +         │
+                                          │  QA 지식카드 (단일   │
+                                          │  컬렉션, COSINE)     │
+                                          └──────────────────────┘
 ```
 
 **데이터 흐름:**
@@ -61,9 +69,9 @@
 |------|------|
 | **Frontend** | React 18, TypeScript, Vite, TailwindCSS, React Router v6 |
 | **Backend** | Java 17, Spring Boot 3.3.0, Spring Data JPA, H2 Database, AWS Java SDK |
-| **RAG Server** | Python 3.10+, FastAPI, FAISS, sentence-transformers, LiteLLM |
-| **LLM Server** | Python 3.10+, FastAPI, LiteLLM, pypdf, python-docx |
-| **Storage** | MinIO (S3 호환), H2 File Mode DB |
+| **RAG Server** | Python 3.10+, FastAPI, LangChain, Qdrant, HuggingFace Embeddings (`all-MiniLM-L6-v2`), LiteLLM SDK, PyMuPDF |
+| **LLM Server** | Python 3.10+, FastAPI, LiteLLM SDK, pypdf, python-docx |
+| **Storage** | MinIO (S3 호환), Qdrant (벡터 DB), H2 File Mode DB |
 
 ---
 
@@ -80,18 +88,27 @@
 
 ## 로컬 실행 가이드
 
-### Step 1. MinIO (로컬 S3) 실행
+### Step 1. 인프라 컨테이너 실행 (MinIO + Qdrant)
 
-프로젝트 루트에서 Docker Compose로 MinIO를 백그라운드 실행합니다.
+AI 서버를 호스트에서 직접 띄울 경우, 의존 인프라만 골라 실행합니다.
 
 ```bash
-docker-compose up -d
+docker compose up -d minio
+
+# Qdrant는 compose에서 호스트 포트를 발행하지 않으므로(아래 주의 참고),
+# 호스트에서 rag_server를 실행할 때는 포트를 발행한 단독 컨테이너를 씁니다.
+docker run -d --name qdrant-dev -p 6333:6333 qdrant/qdrant:v1.18.0
 ```
+
+> **주의 1.** `docker compose up -d`를 인자 없이 실행하면 nginx·backend·모니터링 스택까지 **10개 서비스 전체**가 뜹니다. 전체 스택을 컨테이너로 돌릴 때만 사용하세요.
+>
+> **주의 2.** compose의 `qdrant` 서비스는 `expose`만 선언해 컨테이너 네트워크 내부에서만 접근됩니다(호스트/외부 노출 없음). 전체 스택을 컨테이너로 띄우면 `rag-server`가 `http://qdrant:6333`으로 접근하므로 문제가 없지만, 호스트에서 `uvicorn`으로 실행할 때는 위처럼 포트를 발행한 컨테이너가 필요합니다.
 
 | 엔드포인트 | 주소 | 용도 |
 |------------|------|------|
 | S3 API | `http://localhost:9000` | 백엔드 / AI 서버 연동 |
-| Console UI | `http://localhost:9001` | 관리 콘솔 (계정: `minioadmin` / `minioadmin`) |
+| Console UI | `http://localhost:9001` | MinIO 관리 콘솔 (계정: `minioadmin` / `minioadmin`) |
+| Qdrant (개발용 단독 컨테이너) | `http://localhost:6333` | 벡터 DB. 대시보드: `/dashboard` |
 
 ---
 
@@ -125,7 +142,9 @@ rag_server를 처음 실행할 때 한 번만 수행합니다.
 python embedded/generate_rag_chunks.py
 ```
 
-실행 완료 후 `rag_server/rag_chunks.jsonl` 파일이 생성되며, 서버 구동 시 자동으로 로드됩니다.
+`rag_server/knowledge_base/*.json`(QA 지식카드 원본)을 읽어 `rag_server/rag_chunks.jsonl`을 생성합니다. 서버 구동 시 이 파일이 자동으로 Qdrant에 적재됩니다(현재 **184청크 / 7종 출처**).
+
+지식카드를 추가하거나 수정했다면 이 스크립트를 다시 실행해야 합니다. `rag_chunks.jsonl`이 `knowledge_base/`보다 오래되면 일부 출처가 검색에서 조용히 빠지며, 이를 감지하는 테스트가 `test_ingestion.py`에 있습니다.
 
 #### 2-3. 환경 변수 설정
 
@@ -135,22 +154,25 @@ python embedded/generate_rag_chunks.py
 cp .env.example .env
 ```
 
-**로컬 테스트 모드 (API 비용 없음 - 권장):**
+**실제 LLM 연동 모드 (기본값):**
 
 ```env
-MOCK_RAG=false
-MOCK_LLM=true
-BACKEND_URL=http://localhost:8080
-```
-
-**실제 LLM 연동 모드:**
-
-```env
-MOCK_RAG=false
 MOCK_LLM=false
 LLM_MODEL=gpt-4o-mini
 BACKEND_URL=http://localhost:8080
+QDRANT_URL=http://localhost:6333
+QDRANT_COLLECTION=yeonam_knowledge
 ```
+
+**로컬 Mock 모드 (API 비용 없음):**
+
+```env
+MOCK_LLM=true
+BACKEND_URL=http://localhost:8080
+QDRANT_URL=http://localhost:6333
+```
+
+> `MOCK_LLM`의 기본값은 `false`입니다. 환경변수 누락으로 가짜 결과가 정상 응답처럼 나가지 않도록, Mock은 반드시 명시적으로 켜야 합니다. Mock을 끈 상태에서 LLM 호출이나 응답 파싱이 실패하면 mock으로 폴백하지 않고 분석이 `FAILED`로 처리됩니다.
 
 > 실제 LLM 모드에서는 프론트엔드 UI의 API Key 입력란에 유효한 OpenAI API Key를 입력해야 합니다.
 
@@ -209,6 +231,7 @@ npm run dev
 | Frontend (React) | 3000 | Vite 개발 서버 |
 | Backend (Spring Boot) | 8080 | REST API 서버 |
 | AI Server (FastAPI) | 8000 | RAG Server 또는 LLM Server |
+| Qdrant | 6333 | 벡터 DB (호스트 개발 시 단독 컨테이너로 발행) |
 | MinIO S3 API | 9000 | 오브젝트 스토리지 API |
 | MinIO Console | 9001 | 웹 관리 콘솔 |
 
@@ -220,12 +243,12 @@ npm run dev
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `MOCK_LLM` | `true` | `true`면 LLM 호출을 Mock으로 처리 (API 비용 없음) |
-| `MOCK_RAG` | `true` | `true`면 S3 다운로드/파싱/인덱싱을 건너뜀 (rag_server 전용) |
+| `MOCK_LLM` | `false` | `true`면 LLM 호출을 Mock으로 처리 (API 비용 없음). 기본값이 `false`이므로 Mock은 명시적으로 켜야 합니다 |
 | `BACKEND_URL` | `http://localhost:8080` | 웹훅 콜백을 보낼 백엔드 주소 |
 | `LLM_MODEL` | `gpt-4o-mini` | 실제 LLM 호출 시 사용할 모델명 |
-| `EMBEDDING_PROVIDER` | `local` | 임베딩 제공자 (`local` = sentence-transformers) |
-| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | 로컬 임베딩 모델명 |
+| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | 로컬 임베딩 모델명 (384차원, rag_server 전용) |
+| `QDRANT_URL` | `http://qdrant:6333` | Qdrant 주소. `:memory:`면 서버 없이 로컬 모드 (테스트용, rag_server 전용) |
+| `QDRANT_COLLECTION` | `yeonam_knowledge` | 컬렉션명 (rag_server 전용) |
 
 ### backend `.env`
 
@@ -233,8 +256,8 @@ npm run dev
 |------|--------|------|
 | `AI_SERVER_URL` | `http://localhost:8000` | 연동할 AI 서버 주소 |
 | `LLM_PROVIDER` | `openai` | LLM 프로바이더 (`openai` 또는 `bedrock`) |
-| `LLM_API_KEY` | 없음 (**필수**) | OpenAI / LiteLLM / Anthropic proxy API 키 |
-| `LLM_BASE_URL` | `https://api.openai.com/v1` | LLM 엔드포인트 URL (LiteLLM 프록시 사용 시 변경) |
+| `LLM_API_KEY` | 없음 (**필수**) | OpenAI 호환 엔드포인트용 API 키 |
+| `LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI 호환 엔드포인트 URL. 외부 프록시(LiteLLM Proxy 등)를 별도로 운영한다면 그 주소로 변경 가능 |
 | `LLM_MODEL` | `gpt-4o` | 사용할 모델명 |
 | `AWS_REGION` | `us-east-1` | Bedrock 사용 시 AWS 리전 |
 | `AWS_BEDROCK_MODEL_ID` | `anthropic.claude-3-haiku-20240307-v1:0` | Bedrock 사용 시 모델 ID |
@@ -247,7 +270,8 @@ LLM_PROVIDER=openai
 LLM_API_KEY=sk-...
 LLM_MODEL=gpt-4o
 
-# LiteLLM 프록시 (Claude, Gemini 등 멀티 프로바이더)
+# 외부 OpenAI 호환 프록시 경유 (직접 띄운 LiteLLM Proxy 등)
+# 주의: 이 프로젝트는 프록시 서버를 포함하지 않습니다. 별도로 운영해야 합니다.
 LLM_PROVIDER=openai
 LLM_BASE_URL=http://localhost:4000/v1
 LLM_API_KEY=anything
@@ -312,17 +336,19 @@ $env:AI_SERVER_URL="http://localhost:8001"
 
 ## RAG 지식베이스
 
-`rag_server`는 아래 QA/보안 표준 문서를 기반으로 구축된 지식베이스를 검색에 활용합니다.
+`rag_server`는 아래 QA/보안 표준 문서를 기반으로 구축된 지식베이스를 검색에 활용합니다. 총 **184청크 / 7종 출처**이며, 서버 기동 시 Qdrant에 적재됩니다.
 
-| 지식베이스 | 내용 |
-|-----------|------|
-| ISTQB | 소프트웨어 테스팅 국제 표준 자격 지식 카드 |
-| OWASP | 웹 보안 취약점 및 대응 방법 |
-| Playwright | E2E 테스트 자동화 모범 사례 |
-| Cypress | E2E 테스트 베스트 프랙티스 |
-| NIST SAMATE | 소프트웨어 보증 및 정적 분석 기준 |
-| Atlassian | 애자일 QA 및 프로세스 관리 지식 카드 |
-| MS Playbook | Microsoft 테스트 플레이북 |
+| 지식베이스 | 내용 | 청크 수 |
+|-----------|------|--------|
+| MS Playbook | Microsoft 테스트 플레이북 | 36 |
+| OWASP | 웹 보안 취약점 및 대응 방법 | 34 |
+| ISTQB | 소프트웨어 테스팅 국제 표준 자격 지식 카드 | 29 |
+| Playwright | E2E 테스트 자동화 모범 사례 | 28 |
+| Atlassian | 애자일 QA 및 프로세스 관리 지식 카드 | 24 |
+| Cypress | E2E 테스트 베스트 프랙티스 | 22 |
+| NIST SAMATE | 소프트웨어 보증 및 정적 분석 기준 | 11 |
+
+문서 청크와 지식카드는 **하나의 Qdrant 컬렉션**에 함께 저장되어 단일 유사도 검색으로 같이 랭킹됩니다. 지식카드는 고정 `file_id`(`__knowledge_base__`)를 쓰므로 사용자 문서 삭제 시 영향받지 않습니다.
 
 ---
 
@@ -335,8 +361,10 @@ $env:AI_SERVER_URL="http://localhost:8001"
 | `POST` | `/api/analysis/trigger` | 비동기 분석 작업 트리거 (202 Accepted) |
 | `POST` | `/analyze` | 동일 기능의 대체 경로 |
 | `POST` | `/api/files/preprocess` | 파일 파싱 가능 여부 사전 검증 |
-| `DELETE` | `/api/vectors/{fileId}` | FAISS 벡터 청크 삭제 (rag_server 전용) |
-| `GET` | `/health` | 서버 상태 및 Mock 모드 확인 |
+| `DELETE` | `/api/vectors/{fileId}` | Qdrant 벡터 청크 삭제 — `metadata.file_id` 필터 기반 (rag_server 전용) |
+| `POST` | `/api/eval/generate` | 품질 평가용 동기 생성 (`evaluation/eval_runner.py`가 호출) |
+| `GET` | `/metrics` | Prometheus 메트릭 (토큰 Counter, 처리 시간 Histogram) |
+| `GET` | `/health` | 서버 상태 확인. rag_server는 Qdrant 연결 실패 시 `503` 반환 |
 
 **분석 트리거 요청 예시:**
 ```json
@@ -379,6 +407,20 @@ mvn test -Dtest=AnalysisJobEntityTests # H2 스키마 및 콜백 수집 로직 �
 .maven\apache-maven-3.9.6\bin\mvn.cmd test -Dtest=S3SyncTests
 .maven\apache-maven-3.9.6\bin\mvn.cmd test -Dtest=AnalysisJobEntityTests
 ```
+
+rag_server pytest (총 54개):
+
+```bash
+cd rag_server
+
+# 단위 테스트 — Qdrant 로컬 모드(:memory:) + 가짜 임베딩. 서버·모델 다운로드 불필요
+python -m pytest -m "not integration"
+
+# 통합 테스트 — 실제 Qdrant 서버 대상
+QDRANT_URL=http://localhost:6333 python -m pytest test_integration_qdrant.py -m integration
+```
+
+CI(`.github/workflows/rag-tests.yml`)는 Qdrant 서비스 컨테이너를 띄워 두 갈래를 모두 실행하며, 통합 테스트가 skip되거나 0건 수집되면 워크플로우를 실패시킵니다.
 
 AI 서버 수동 연동 검증 (cURL):
 
@@ -432,4 +474,9 @@ API Key 만료/오류 발생 시 AI 서버가 `FAILED` 콜백을 즉시 전송�
 
 **MinIO 연결 오류:** 백엔드 부팅 시 MinIO 버킷 존재 여부를 확인하고 자동 생성합니다. S3 연결 오류 발생 시 Docker Container의 MinIO(포트 9000)가 정상 실행 중인지 확인하세요.
 
-**MOCK 모드 활용:** API 비용 없이 AI 서버(rag_server/llm_server) 파이프라인을 테스트하려면 AI 서버 `.env`에서 `MOCK_LLM=true`, `MOCK_RAG=true`로 설정하세요. 단, 백엔드(Spring Boot) 자체 LLM 클라이언트(보완 시나리오 생성)는 Mock 모드가 없으므로 `LLM_API_KEY` 설정이 필수입니다.
+**MOCK 모드 활용:** API 비용 없이 AI 서버(rag_server/llm_server) 파이프라인을 테스트하려면 AI 서버 `.env`에서 `MOCK_LLM=true`로 설정하세요(기본값은 `false`). 단, 백엔드(Spring Boot) 자체 LLM 클라이언트(보완 시나리오 생성)는 Mock 모드가 없으므로 `LLM_API_KEY` 설정이 필수입니다.
+
+**Qdrant 컬렉션 초기화:** 임베딩 모델을 바꾸면 벡터 차원이 달라져 rag_server가 "벡터 차원 불일치" 예외로 기동에 실패합니다. 이는 의도된 동작이며, 기존 컬렉션을 삭제하고 재적재해야 합니다.
+```bash
+curl -X DELETE http://localhost:6333/collections/yeonam_knowledge
+```

@@ -1,0 +1,94 @@
+name: rag-server tests
+
+on:
+  push:
+    paths:
+      - 'rag_server/**'
+      - '.github/workflows/rag-tests.yml'
+  pull_request:
+    paths:
+      - 'rag_server/**'
+      - '.github/workflows/rag-tests.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      qdrant:
+        image: qdrant/qdrant:v1.18.0
+        ports:
+          - 6333:6333
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: rag_server/requirements.txt
+
+      - name: Install dependencies (CPU-only torch)
+        working-directory: rag_server
+        run: |
+          python -m pip install --upgrade pip
+          pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
+
+      - name: Wait for Qdrant
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:6333/healthz; then echo " qdrant ready"; exit 0; fi
+            sleep 2
+          done
+          echo "qdrant did not become ready in time" >&2
+          exit 1
+
+      - name: Unit tests (Qdrant local mode, no server)
+        working-directory: rag_server
+        # No `env:` here and no job-level `env:` block above, so QDRANT_URL
+        # cannot be inherited from this workflow. We also fail fast if some
+        # ambient runner environment happens to export it anyway, since
+        # conftest.py's os.environ.setdefault() would otherwise silently let
+        # unit tests run against a real shared Qdrant instead of :memory:.
+        run: |
+          set -euo pipefail
+          if [ -n "${QDRANT_URL:-}" ]; then
+            echo "QDRANT_URL must not be set for unit tests (found: '$QDRANT_URL')" >&2
+            exit 1
+          fi
+          python -m pytest -v -m "not integration"
+
+      - name: Integration tests (live Qdrant service container)
+        working-directory: rag_server
+        env:
+          QDRANT_URL: http://localhost:6333
+        run: |
+          set -euo pipefail
+          python -m pytest test_integration_qdrant.py -v -m integration --junitxml=integration-results.xml
+          python - <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse("integration-results.xml").getroot()
+          suite = root if root.tag == "testsuite" else root.find("testsuite")
+          tests = int(suite.get("tests", 0))
+          skipped = int(suite.get("skipped", 0))
+          failures = int(suite.get("failures", 0))
+          errors = int(suite.get("errors", 0))
+          print(f"integration summary: tests={tests} skipped={skipped} failures={failures} errors={errors}")
+
+          if tests == 0:
+              print("::error::No integration tests were collected", file=sys.stderr)
+              sys.exit(1)
+          if skipped > 0:
+              print(
+                  "::error::Integration tests were skipped instead of running against "
+                  "a live Qdrant server. QDRANT_URL is unset/':memory:' or the service "
+                  "container never became reachable.",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          if failures or errors:
+              sys.exit(1)
+          PY

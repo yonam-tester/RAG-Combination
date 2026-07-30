@@ -1,5 +1,6 @@
 """ingestion 단위 테스트."""
 import json
+import os
 
 import pytest
 from langchain_core.documents import Document
@@ -66,6 +67,27 @@ def test_load_documents_falls_back_to_knowledge_base_json(tmp_path, monkeypatch)
         "QA-SAMPLE-KNOWLEDGE-CARDS-0000",
         "QA-SAMPLE-KNOWLEDGE-CARDS-0001",
     }
+
+
+def test_every_knowledge_base_source_is_actually_ingested():
+    """실제 저장소 데이터 검증: knowledge_base/의 모든 출처가 적재 대상에 포함되어야 한다.
+
+    rag_chunks.jsonl이 knowledge_base/보다 오래되면 일부 출처가 조용히 누락된다.
+    (그 경우 load_knowledge_documents는 jsonl만 읽고 디렉터리를 아예 보지 않는다.)
+    이 테스트는 그 드리프트를 잡는다.
+    """
+    expected_sources = {
+        name for name in os.listdir(ingestion.KNOWLEDGE_BASE_DIR)
+        if name.lower().endswith(".json")
+    }
+
+    ingested_sources = {doc.metadata["file_name"] for doc in ingestion.load_knowledge_documents()}
+
+    missing = expected_sources - ingested_sources
+    assert not missing, (
+        f"knowledge_base/에 있으나 적재되지 않는 출처: {sorted(missing)}. "
+        f"embedded/generate_rag_chunks.py로 rag_chunks.jsonl을 재생성해야 한다."
+    )
 
 
 def test_load_documents_falls_back_to_default_kb(tmp_path, monkeypatch):

@@ -302,7 +302,7 @@ async def health_check():
         status_code=status.HTTP_200_OK if qdrant_up else status.HTTP_503_SERVICE_UNAVAILABLE,
         content={
             "status": "healthy" if qdrant_up else "unhealthy",
-            "mock_llm": os.getenv("MOCK_LLM", "true").lower() == "true",
+            "mock_llm": os.getenv("MOCK_LLM", "false").lower() == "true",
             "qdrant": "up" if qdrant_up else "down",
             "queue_size": queue_manager.queue.qsize(),
         },

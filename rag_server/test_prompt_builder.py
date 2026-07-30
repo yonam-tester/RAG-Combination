@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from langchain_core.exceptions import OutputParserException
 
 import prompt_builder
 from prompt_builder import build_prompt, call_llm_with_key
@@ -105,14 +106,46 @@ async def test_dynamic_api_key_reaches_litellm(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_unparseable_response_falls_back_to_mock(monkeypatch):
+async def test_unparseable_response_raises_instead_of_returning_mock(monkeypatch):
+    """LLM 응답을 파싱할 수 없으면 실패로 전파해야 한다.
+
+    mock 테스트케이스를 조용히 돌려주면 사용자는 실제 문서와 무관한 가짜 결과를
+    정상 분석 결과로 받게 된다. 실패는 실패로 드러나야 한다.
+    """
     monkeypatch.setenv("MOCK_LLM", "false")
     acompletion = AsyncMock(return_value=_litellm_response("JSON이 전혀 아닌 응답"))
     monkeypatch.setattr("litellm.acompletion", acompletion)
 
+    with pytest.raises(OutputParserException):
+        await call_llm_with_key("프롬프트")
+
+
+@pytest.mark.asyncio
+async def test_upstream_error_raises_instead_of_returning_mock(monkeypatch):
+    monkeypatch.setenv("MOCK_LLM", "false")
+    monkeypatch.setattr(
+        "litellm.acompletion", AsyncMock(side_effect=RuntimeError("upstream 503"))
+    )
+
+    with pytest.raises(RuntimeError, match="upstream 503"):
+        await call_llm_with_key("프롬프트")
+
+
+@pytest.mark.asyncio
+async def test_mock_is_disabled_when_env_unset(monkeypatch):
+    """MOCK_LLM 미설정 시 기본값은 실제 LLM 호출이어야 한다.
+
+    기본값이 mock이면 운영 환경에서 환경변수 하나가 빠졌을 때 가짜 결과를
+    정상 응답으로 내보낸다.
+    """
+    monkeypatch.delenv("MOCK_LLM", raising=False)
+    acompletion = AsyncMock(return_value=_litellm_response('```json\n[{"testCaseId":"TC-1"}]\n```'))
+    monkeypatch.setattr("litellm.acompletion", acompletion)
+
     result = await call_llm_with_key("프롬프트")
 
-    assert result == prompt_builder.MOCK_TEST_CASES["REQ-001"]
+    assert acompletion.await_count == 1
+    assert result != prompt_builder.MOCK_TEST_CASES["REQ-001"]
 
 
 @pytest.mark.asyncio

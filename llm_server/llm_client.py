@@ -57,12 +57,18 @@ class HashEmbedding:
         vectors = [self.embed(text) for text in texts]
         return np.vstack(vectors) if np else vectors
 
-class FaissChunkStore:
+class NumpyChunkStore:
+    """FAISS를 쓰지 않는다. 청크 벡터를 numpy 행렬로 들고 내적으로 완전탐색한다.
+
+    numpy가 없으면 순수 파이썬 루프로 떨어진다. llm-server는 RAG 없는 LLM 단독
+    생성 경로의 비교 기준이라, 외부 벡터DB 의존 없이 오프라인으로 동작하는 것이
+    목적이다. 실제 벡터 검색은 rag-server의 Qdrant가 담당한다.
+    """
+
     def __init__(self, chunks: list[dict[str, Any]], embedder: HashEmbedding) -> None:
         self.chunks = chunks
         self.embedder = embedder
         self.vectors = embedder.embed_many([chunk["content"] for chunk in chunks])
-        self.index = None  # Always fallback to numpy or python search for offline safety
         self.backend = "numpy" if np else "python"
         self.document_frequency = Counter(
             term
@@ -258,7 +264,7 @@ def evidence_payload(result: SearchResult) -> dict[str, Any]:
     }
 
 def retrieve_evidences(
-    store: FaissChunkStore, requirements: list[Requirement], top_k: int
+    store: NumpyChunkStore, requirements: list[Requirement], top_k: int
 ) -> dict[str, list[SearchResult]]:
     return {
         requirement.requirement_id: store.search(requirement.text, top_k)
@@ -319,8 +325,8 @@ def init_chunk_store():
                 for line in file:
                     if line.strip():
                         chunks.append(json.loads(line))
-            global_chunk_store = FaissChunkStore(chunks, HashEmbedding())
-            logger.info("Successfully initialized global FaissChunkStore for local RAG mock mode.")
+            global_chunk_store = NumpyChunkStore(chunks, HashEmbedding())
+            logger.info("Successfully initialized global NumpyChunkStore for local RAG mock mode.")
         else:
             logger.warning("rag_chunks.jsonl not found. Local RAG mock fallback won't perform RAG search.")
     except Exception as e:
@@ -329,8 +335,11 @@ def init_chunk_store():
 async def call_llm(document_text: str, perspectives: list, custom_prompt: str, llm_api_key: str = None) -> str:
     """
     Calls the LLM via LiteLLM. If MOCK_LLM=true, returns mock data after a short sleep.
+
+    기본값은 false다. 기본값이 mock이면 환경변수가 빠진 환경에서 LLM vs RAG
+    품질 비교가 mock 응답끼리의 비교가 되어버린다.
     """
-    mock_llm = os.getenv("MOCK_LLM", "true").lower() == "true"
+    mock_llm = os.getenv("MOCK_LLM", "false").lower() == "true"
     
     if mock_llm:
         logger.info("MOCK_LLM is enabled. Simulating LLM call...")

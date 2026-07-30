@@ -200,9 +200,15 @@ def build_chain(llm_api_key: Optional[str] = None) -> Runnable:
 async def call_llm_with_key(prompt: str, llm_api_key: Optional[str] = None) -> List[Dict]:
     """
     Calls LiteLLM with prompt via an LCEL chain. Supports user dynamic API Key injection.
-    Falls back to mock data if MOCK_LLM=true.
+
+    MOCK_LLM=true일 때만 mock을 반환한다. 기본값은 false다 — 환경변수 누락이
+    가짜 결과를 정상 응답으로 만들면 안 된다.
+
+    호출·파싱 실패는 전파한다. mock으로 조용히 폴백하면 사용자가 자신의 문서와
+    무관한 하드코딩 테스트케이스를 정상 분석 결과로 받는다. 실패 처리는
+    main.process_job이 담당해 FAILED 콜백을 보낸다.
     """
-    if os.getenv("MOCK_LLM", "true").lower() == "true":
+    if os.getenv("MOCK_LLM", "false").lower() == "true":
         logger.info("MOCK_LLM is enabled. Returning mock test cases.")
         await asyncio.sleep(1.0)
         return _pick_mock_test_cases(prompt)
@@ -215,8 +221,5 @@ async def call_llm_with_key(prompt: str, llm_api_key: Optional[str] = None) -> L
         logger.error(f"LiteLLM AuthenticationError caught: {str(e)}")
         raise
     except Exception as e:
-        logger.error(
-            f"Failed to generate test cases via LLM: {str(e)}. Falling back to mock data.",
-            exc_info=True,
-        )
-        return MOCK_TEST_CASES["REQ-001"]
+        logger.error(f"Failed to generate test cases via LLM: {str(e)}", exc_info=True)
+        raise

@@ -1,7 +1,19 @@
 # DevOps 포트폴리오 고도화 설계 — 연암 테스터 (Yeonam Tester)
 
-> 작성일: 2026-07-02  
+> 작성일: 2026-07-02 (면접 Q&A 정리: 2026-07-30)
 > 목표: 취업 자격 요건(필수 4개 + 우대 4개) 기반 단계적 인프라 고도화
+
+---
+
+## ⚠️ 이 문서를 읽는 방법
+
+Phase 1~4는 **아직 구현되지 않은 계획**입니다. Terraform, Kubernetes, ALB/ASG, RDS, Tempo, Loki, Alertmanager는 모두 이 저장소에 존재하지 않습니다.
+
+각 Phase의 「면접 Q&A」는 **지금 그대로 말할 수 있는 형태**로 작성되어 있습니다. 즉 개념은 설명하되, 구현하지 않은 것을 했다고 말하지 않습니다.
+
+초기 버전의 Q&A는 모든 답변이 완료 과거 시제("~했습니다", "연암 테스터에서 ~ 운영했습니다")로 작성되어 있었습니다. 그대로 외워서 말하면 **하지 않은 일을 했다고 진술하게 되고**, 꼬리 질문 한 번에 무너집니다. 그래서 전면 수정했습니다.
+
+**원칙: 구현한 것은 구체적으로, 구현하지 않은 것은 계획으로 말한다.** 미구현을 인정하는 답변은 감점이 아니라, 자기 시스템의 한계를 아는 사람이라는 신호입니다.
 
 ---
 
@@ -9,14 +21,19 @@
 
 | 항목 | 현황 | 평가 |
 |------|------|------|
-| Docker 기반 운영 | Docker Compose (9개 컨테이너) | ✅ 있음 |
-| CI/CD | GitHub Actions → EC2 SSH 배포 | ✅ 있음 (기초) |
-| 옵저버빌리티 | Prometheus + Grafana + cAdvisor | ⚠️ 기초 수준 |
-| 클라우드 운영 | AWS EC2 단일 인스턴스 | ⚠️ 단순 배포 |
+| Docker 기반 운영 | Docker Compose (10개 컨테이너) | ✅ 있음 |
+| CI/CD | GitHub Actions 4개 워크플로우 (EC2 배포 / rag_server 테스트 / 품질 평가 / GH Pages) | ✅ 있음 (배포 전 테스트 게이트 없음) |
+| 벡터 DB | Qdrant + LangChain (문서 청크 + QA 지식카드 184건 단일 컬렉션) | ✅ 있음 |
+| 테스트 자동화 | rag_server 54개 (단위 `:memory:` / 통합 실 Qdrant 분리, CI에서 skip 감지) | ✅ 있음 |
+| 옵저버빌리티 | Prometheus + Grafana + cAdvisor + Pushgateway (수집 job 6개, 대시보드 16패널) | ⚠️ 메트릭만 |
+| 클라우드 운영 | AWS EC2 단일 인스턴스 (t2.micro), IAM Instance Profile, S3 | ⚠️ 단순 배포 |
+| 알럿 (Alertmanager) | 없음 — 지표를 사람이 직접 봐야 함 | ❌ |
+| 중앙 로그 수집 | 없음 (`docker logs`만) | ❌ |
+| 분산 트레이싱 | 없음 | ❌ |
 | Kubernetes | 없음 | ❌ |
 | IaC (Terraform) | 없음 | ❌ |
 | HA / 멀티 AZ | 없음 (단일 EC2) | ❌ |
-| 분산 트레이싱 / 로그 수집 | 없음 | ❌ |
+| 무중단 배포 / 롤백 | 없음 (배포 중 짧은 다운타임 발생) | ❌ |
 
 ---
 
@@ -28,6 +45,8 @@ Phase 2: Kubernetes 전환        → 필수: K8s 기반 서비스 운영
 Phase 3: HA / 멀티 AZ          → 우대: 고가용성 아키텍처
 Phase 4: 옵저버빌리티 고도화    → 우대: 옵저버빌리티 구축
 ```
+
+> 우선순위 제안: Phase 4의 **Alertmanager 알럿 룰**과 **배포 파이프라인 테스트 게이트**가 가장 적은 노력으로 가장 큰 설득력을 줍니다. 이미 Prometheus·테스트 54개가 있으므로 연결만 하면 됩니다. Terraform/K8s는 그 다음입니다.
 
 ---
 
@@ -76,17 +95,17 @@ infra/terraform/
 
 ### 면접 Q&A
 
-**Q1. Terraform을 도입한 이유가 무엇인가요?**
-> "초기에는 AWS 콘솔에서 수동으로 EC2, Security Group, IAM Role을 생성했는데, 팀원이 똑같은 환경을 다시 만들 때 설정 누락이 발생했습니다. Terraform으로 인프라를 코드화하면 `terraform apply` 한 번으로 동일한 환경을 재현할 수 있고, git으로 변경 이력도 추적할 수 있습니다. 연암 테스터 프로젝트에서는 VPC, EC2, IAM Role을 모듈로 분리해 dev/prod 환경을 변수만 바꿔 동일한 구조로 운영했습니다."
+**Q1. Terraform을 도입한 이유가 무엇인가요? / 도입한다면 왜인가요?**
+> "현재 연암 테스터의 인프라는 AWS 콘솔에서 수동으로 만들었습니다. EC2, 보안 그룹, IAM Role을 직접 클릭해서 구성했고, 그 설정이 코드로 남아 있지 않습니다. 그래서 지금 인스턴스가 사라지면 제 기억에 의존해 다시 만들어야 하고, 어떤 값이 왜 그렇게 설정됐는지 이력을 추적할 수 없습니다. 이게 제가 인식한 문제입니다. Terraform으로 코드화하면 `terraform apply`로 동일한 환경을 재현할 수 있고 git으로 변경 이력이 남습니다. 아직 적용하지 못했고, 적용한다면 기존 리소스를 `terraform import`로 state에 가져오는 것부터 시작할 계획입니다."
 
-**Q2. Terraform State 관리를 어떻게 했나요?**
-> "로컬 state 파일은 팀 작업 시 충돌 위험이 있어 S3 Remote Backend로 이전했습니다. DynamoDB를 state lock으로 설정해 두 사람이 동시에 `terraform apply`를 실행해도 한 명만 lock을 획득하도록 했습니다. CI/CD에서 자동 apply 시에도 이 lock 덕분에 race condition 없이 안전하게 배포됩니다."
+**Q2. Terraform State는 어떻게 관리해야 한다고 보나요?**
+> "로컬 state 파일은 팀 작업에서 충돌 위험이 있어 S3 Remote Backend와 DynamoDB state lock을 쓰는 것이 표준입니다. lock이 있으면 두 사람이 동시에 apply해도 한 명만 획득하므로 race condition이 생기지 않습니다. 다만 이건 개념으로 이해한 수준이고, 제가 직접 운영해 본 경험은 아닙니다."
 
-**Q3. `terraform plan`과 `terraform apply`를 CI/CD에 어떻게 통합했나요?**
-> "PR 생성 시에는 `terraform plan`만 실행해 결과를 PR 코멘트로 자동 게시하고, main 브랜치 머지 시에만 `terraform apply`가 실행되도록 설정했습니다. 이렇게 하면 인프라 변경 사항을 코드 리뷰와 동일한 흐름으로 검토할 수 있습니다."
+**Q3. `terraform plan`과 `apply`를 CI/CD에 어떻게 통합하겠습니까?**
+> "PR에서는 `plan`만 실행해 결과를 PR 코멘트로 게시하고, main 머지 시에만 `apply`가 돌게 해서 인프라 변경을 코드 리뷰와 같은 흐름으로 검토하는 방식이 일반적입니다. 현재 연암 테스터의 GitHub Actions는 애플리케이션 배포만 담당하고 인프라는 다루지 않습니다."
 
-**Q4. 기존에 수동 생성된 AWS 리소스를 Terraform으로 관리하려면 어떻게 하나요?**
-> "`terraform import` 명령으로 기존 리소스의 ARN/ID를 state에 가져온 뒤, 해당 리소스의 HCL 코드를 작성하고 `terraform plan`으로 drift 없음을 확인합니다. 연암 테스터에서는 기존 EC2 인스턴스와 IAM Role을 이 방식으로 코드화했습니다."
+**Q4. 기존에 수동 생성된 AWS 리소스를 Terraform으로 관리하려면?**
+> "`terraform import`로 기존 리소스의 ID를 state에 가져온 뒤 해당 HCL을 작성하고, `terraform plan`에서 변경 사항이 없음(no drift)을 확인하는 순서입니다. 연암 테스터의 EC2와 IAM Role이 정확히 이 대상인데, 아직 실습해 보지 못했습니다."
 
 ---
 
@@ -116,8 +135,11 @@ k8s/
     └── grafana.yaml
 ```
 
+> Qdrant는 상태를 가지므로 Deployment가 아니라 StatefulSet + PVC로 배치해야 합니다. 위 구조에는 아직 반영되지 않았습니다.
+
 ### 핵심 K8s 오브젝트
 - `Deployment` (replicas, rollingUpdate 전략, resource limits)
+- `StatefulSet` + `PersistentVolumeClaim` (Qdrant 등 상태 보유 컴포넌트)
 - `Service` (ClusterIP 내부 통신, LoadBalancer 외부 노출)
 - `Ingress` (nginx-ingress, 경로 기반 라우팅)
 - `ConfigMap` (환경변수), `Secret` (API 키, DB 패스워드)
@@ -143,21 +165,22 @@ k8s/
 | 4 | ConfigMap / Secret 관리 | K8s Secret 문서 |
 | 5 | HorizontalPodAutoscaler (HPA) | K8s HPA 문서 |
 | 6 | nginx-ingress + TLS 설정 | ingress-nginx 문서 |
-| 7 | ECR + kubectl CI/CD 연동 | GitHub Actions + EKS 가이드 |
+| 7 | StatefulSet + PVC (Qdrant 영속성) | K8s StatefulSet 문서 |
+| 8 | ECR + kubectl CI/CD 연동 | GitHub Actions + EKS 가이드 |
 
 ### 면접 Q&A
 
-**Q1. Docker Compose에서 Kubernetes로 전환한 이유는 무엇인가요?**
-> "Docker Compose는 단일 호스트에서만 동작하기 때문에 서버가 하나 죽으면 전체 서비스가 중단됩니다. Kubernetes는 여러 노드에 Pod를 분산 배치하고, Pod가 죽으면 자동으로 재시작하는 Self-healing이 내장되어 있습니다. 연암 테스터에서는 RAG 서버가 메모리를 많이 사용해 OOM이 가끔 발생했는데, K8s로 전환 후 컨테이너 재시작이 자동화되어 운영 부담이 줄었습니다."
+**Q1. Docker Compose와 Kubernetes의 차이는? 왜 전환이 필요하다고 보나요?**
+> "Docker Compose는 단일 호스트 전용이라 그 호스트가 죽으면 전체 서비스가 중단됩니다. 연암 테스터가 정확히 이 상태입니다. t2.micro 한 대에 10개 컨테이너가 올라가 있어서 인스턴스 장애가 곧 전체 장애이고, 트래픽이 늘면 수동으로 스케일업해야 합니다. Kubernetes는 여러 노드에 Pod를 분산하고 죽은 Pod를 자동 재시작하는 self-healing이 내장돼 있어 이 문제를 구조적으로 해결합니다. 다만 K8s는 아직 도입하지 않았고, 설계 문서만 작성해 둔 상태입니다."
 
-**Q2. Deployment의 rollingUpdate 전략을 어떻게 설정했나요?**
-> "`maxSurge: 1, maxUnavailable: 0`으로 설정했습니다. 새 버전 Pod가 하나 먼저 뜨고 Ready 상태가 되면, 기존 Pod를 하나씩 제거하는 방식입니다. 이렇게 하면 배포 중에도 최소 기존 replicas 수만큼 항상 트래픽을 받을 수 있습니다."
+**Q2. Deployment의 rollingUpdate 전략은 어떻게 설정하는 것이 좋습니까?**
+> "`maxSurge: 1, maxUnavailable: 0`이면 새 Pod가 먼저 Ready가 된 뒤 기존 Pod를 하나씩 제거하므로 배포 중에도 가용 replica 수가 유지됩니다. 현재 연암 테스터는 `docker compose up -d --build`로 컨테이너를 교체해서 배포 중 짧은 다운타임이 발생합니다. 이 부분을 무중단으로 개선하는 것이 목표입니다."
 
-**Q3. K8s에서 Secret을 어떻게 안전하게 관리했나요?**
-> "초기에는 base64 인코딩 Secret을 git에 올렸는데, base64는 암호화가 아니므로 보안 문제가 있었습니다. 이후 External Secrets Operator를 도입해 AWS Secrets Manager에 실제 값을 저장하고, K8s Secret은 자동 동기화되도록 변경했습니다. CI/CD에서도 GitHub Secrets에서 값을 주입하는 방식을 사용합니다."
+**Q3. K8s에서 Secret을 안전하게 관리하는 방법은?**
+> "base64 인코딩된 Secret을 git에 올리면 안 됩니다. base64는 인코딩이지 암호화가 아니기 때문입니다. AWS Secrets Manager에 실제 값을 두고 External Secrets Operator로 K8s Secret을 동기화하는 방식이 권장됩니다. 현재 연암 테스터는 K8s를 쓰지 않고, 민감 값은 GitHub Actions Secrets와 EC2의 `.env` 파일로 관리합니다. `.env`는 git에 올라가지 않도록 `.gitignore`에 넣었지만, 인스턴스에 평문으로 존재하는 건 한계입니다."
 
-**Q4. HPA(HorizontalPodAutoscaler)를 설정한 기준은 무엇인가요?**
-> "CPU utilization 70%를 기준으로 최소 2개, 최대 5개 replicas가 되도록 설정했습니다. RAG 서버는 임베딩 계산으로 CPU를 많이 써서 요청이 몰리면 응답이 느려지는 문제가 있었는데, HPA 도입 후 자동으로 스케일 아웃되어 p95 응답시간이 안정화됐습니다."
+**Q4. HPA는 어떤 기준으로 설정하겠습니까?**
+> "연암 테스터에서 스케일 기준으로 삼을 지표는 CPU가 맞다고 봅니다. rag-server가 임베딩 계산을 로컬 CPU에서 수행하기 때문입니다. CPU 70% 기준으로 최소 2, 최대 5 replicas 정도가 출발점일 것 같습니다. 다만 지금은 HPA가 없고, 대신 `asyncio.Queue`에 워커를 1개만 둬서 분석 작업을 직렬로 처리하는 방식으로 메모리 초과를 막고 있습니다. 스케일 아웃 대신 스케일을 강제로 1로 묶은 셈입니다."
 
 ---
 
@@ -210,17 +233,17 @@ infra/terraform/modules/
 
 ### 면접 Q&A
 
-**Q1. 고가용성(HA)을 위해 어떤 설계를 적용했나요?**
-> "단일 장애점(SPOF)을 제거하는 데 집중했습니다. 애플리케이션 레이어는 ALB + ASG로 최소 2개 AZ에 EC2를 분산 배치했고, 데이터 레이어는 RDS Multi-AZ로 Standby 복제본이 자동 페일오버되도록 했습니다. S3를 오브젝트 스토리지로 사용해 MinIO 단일 노드 의존성도 제거했습니다."
+**Q1. 고가용성(HA)을 위해 어떤 설계가 필요하다고 보나요?**
+> "핵심은 단일 장애점 제거입니다. 애플리케이션 레이어는 ALB + ASG로 2개 이상 AZ에 분산하고, 데이터 레이어는 RDS Multi-AZ로 Standby 자동 페일오버를 두는 구성이 표준입니다. 연암 테스터는 아직 이 구조가 아닙니다. 단일 AZ의 EC2 한 대에 애플리케이션과 H2 파일 DB, Qdrant가 모두 올라가 있어서 SPOF가 여러 겹으로 존재합니다. 이걸 알고 있고, 개선 순서는 데이터 레이어 분리(RDS) → 애플리케이션 다중화 → ALB 순으로 잡고 있습니다."
 
-**Q2. 멀티 AZ 구성 시 데이터 정합성은 어떻게 유지했나요?**
-> "RDS Multi-AZ는 동기 복제(Synchronous Replication)를 사용하므로 Primary에 쓴 데이터가 Standby에도 즉시 반영됩니다. 페일오버 시 DNS가 자동으로 Standby를 가리키기 때문에 애플리케이션 코드 변경 없이 전환됩니다. 애플리케이션 자체는 JPA 기반의 Stateless 설계라 어느 EC2 인스턴스로 요청이 들어와도 동일하게 처리됩니다."
+**Q2. 멀티 AZ 구성에서 데이터 정합성은 어떻게 유지됩니까?**
+> "RDS Multi-AZ는 동기 복제라 Primary에 커밋된 데이터가 Standby에 즉시 반영되고, 페일오버 시 엔드포인트 DNS가 Standby를 가리키므로 애플리케이션 코드 변경이 필요 없습니다. 다중화의 전제 조건은 애플리케이션이 stateless여야 한다는 점인데, 연암 테스터 백엔드는 JPA 기반이고 세션에 상태를 두지 않아 그 조건은 충족합니다. 다만 현재 DB가 로컬 H2 파일이라 인스턴스를 늘리면 각 인스턴스가 서로 다른 DB를 보게 되어, 다중화 전에 DB 외부화가 반드시 선행돼야 합니다."
 
-**Q3. ALB Health Check는 어떻게 설정했나요?**
-> "Spring Boot Actuator의 `/actuator/health` 엔드포인트를 ALB Health Check 경로로 설정했습니다. 인스턴스가 DB 연결 실패나 AI 서버 연결 불가 상태가 되면 health check가 실패해 ALB가 자동으로 해당 인스턴스를 Target Group에서 제외합니다."
+**Q3. ALB Health Check는 어떻게 설정하겠습니까?**
+> "Spring Boot Actuator의 `/actuator/health`를 Health Check 경로로 쓰면 됩니다. 이 엔드포인트는 이미 노출해 둔 상태입니다. 인스턴스가 비정상이면 ALB가 Target Group에서 자동 제외합니다. 참고로 rag-server에도 `/health`를 두고 Qdrant 연결이 끊기면 503을 반환하도록 구현했는데, 지금은 이 신호를 받아 트래픽을 빼줄 로드밸런서가 없어서 신호만 있고 활용은 못 하는 상태입니다."
 
-**Q4. Auto Scaling 트리거 기준은 무엇으로 설정했나요?**
-> "CPU 70% 임계값과 ALB RequestCount를 조합했습니다. CPU만 보면 메모리 부하에 반응이 늦고, 요청 수만 보면 처리 능력이 충분한데도 스케일 아웃될 수 있습니다. 두 지표 중 하나라도 임계값을 넘으면 스케일 아웃, 둘 다 낮아지면 쿨다운 후 스케일 인되도록 설정했습니다."
+**Q4. Auto Scaling 트리거 기준은?**
+> "CPU 단일 지표만 보면 메모리 부하에 늦게 반응하고, 요청 수만 보면 여유가 있어도 불필요하게 스케일 아웃될 수 있어 두 지표를 조합하는 편이 안전합니다. 연암 테스터는 오토스케일링이 없어 트래픽이 늘면 수동 스케일업해야 하고, 이건 8장 한계로 정리해 뒀습니다."
 
 ---
 
@@ -233,8 +256,8 @@ infra/terraform/modules/
 
 | Pillar | 현재 | 추가 후 |
 |--------|------|---------|
-| Metrics | Prometheus + Grafana | + Alertmanager + SLO 패널 |
-| Logs | 없음 | + Loki + Promtail |
+| Metrics | Prometheus + Grafana + cAdvisor + Pushgateway (job 6개, 16패널) | + Alertmanager + SLO 패널 |
+| Logs | 없음 (`docker logs`만) | + Loki + Promtail |
 | Traces | 없음 | + OpenTelemetry SDK + Tempo |
 
 ### 파일 구조
@@ -273,6 +296,8 @@ groups:
           summary: "p95 응답시간 2초 초과"
 ```
 
+> 위 예시는 표준 메트릭명(`http_requests_total`)을 쓰고 있습니다. 실제 적용 시에는 현재 노출 중인 메트릭명(`rag_request_duration_seconds`, `llm_request_duration_seconds`)으로 바꿔야 동작합니다.
+
 **OpenTelemetry 연동 (Spring Boot):**
 ```xml
 <!-- pom.xml 추가 -->
@@ -308,32 +333,35 @@ otel:
 ### 면접 Q&A
 
 **Q1. 옵저버빌리티와 모니터링의 차이를 설명해주세요.**
-> "모니터링은 '알고 있는 문제'를 감시하는 것입니다. CPU 90% 넘으면 알람 같은 식이죠. 옵저버빌리티는 '모르는 문제'를 시스템 외부에서 파악할 수 있는 능력입니다. 연암 테스터에서 단순 Prometheus 알람만으로는 'RAG 서버가 느린 이유'를 알 수 없었습니다. Tempo 분산 트레이싱을 추가한 후 FAISS 벡터 검색이 병목임을 TraceID로 추적해 확인할 수 있었습니다."
+> "모니터링은 '알고 있는 문제'를 감시하는 것입니다. CPU 90% 초과 시 알람 같은 식이죠. 옵저버빌리티는 시스템이 내보내는 신호만으로 '예상하지 못한 문제'까지 파악할 수 있는 능력입니다. 이 기준으로 보면 연암 테스터는 옵저버빌리티가 아니라 모니터링 단계입니다. Prometheus로 메트릭은 수집하지만 로그 중앙 수집과 분산 트레이싱이 없고, 알럿도 없어서 제가 대시보드를 직접 봐야 이상을 압니다. 다만 단계별 소요 시간을 응답에 담는 `pipelineTrace`를 직접 구현해서, 분석 요청이 파싱·청킹·색인·검색·생성 중 어디서 오래 걸렸는지는 추적할 수 있습니다. 정식 트레이싱의 아주 축소된 형태라고 생각합니다."
 
-**Q2. SLO를 어떻게 설정했고, Error Budget은 어떻게 활용했나요?**
-> "가용성 SLO는 99.5%, p95 응답시간 SLO는 2초 이하로 설정했습니다. Error Budget = 1 - SLO = 월 0.5%, 약 216분입니다. Grafana SLO 대시보드에서 남은 Error Budget을 실시간으로 보여주고, Budget 50% 소진 시 Slack 알람이 가도록 설정했습니다. Budget이 빠르게 줄어들면 새 기능 배포를 멈추고 안정성 개선에 집중하는 기준으로 사용합니다."
+**Q2. SLO와 Error Budget 개념을 설명해주세요.**
+> "SLO는 목표 서비스 수준이고, Error Budget은 `1 - SLO`로 허용되는 실패량입니다. 가용성 SLO가 99.5%면 월 약 216분의 예산이 있고, 이 예산이 빠르게 소진되면 신규 기능 배포를 멈추고 안정화에 집중하는 판단 기준으로 씁니다. 연암 테스터에는 SLO를 정의하지 않았습니다. 개인 프로젝트이고 트래픽이 없어 의미 있는 목표치를 정하기 어려웠는데, 정한다면 먼저 필요한 건 SLO 수치가 아니라 위반을 감지할 Alertmanager라고 생각합니다."
 
-**Q3. Loki와 Elasticsearch 중 Loki를 선택한 이유는 무엇인가요?**
-> "Elasticsearch는 로그를 인덱싱하므로 검색 성능은 우수하지만 운영 비용이 높습니다. Loki는 로그를 인덱싱하지 않고 레이블만 인덱싱하므로 저장 비용이 낮고, Grafana와 네이티브로 통합됩니다. 연암 테스터는 이미 Prometheus + Grafana 스택을 사용하고 있어 Loki를 추가하면 메트릭과 로그를 같은 Grafana 화면에서 연관 분석할 수 있다는 장점이 있었습니다."
+**Q3. Loki와 Elasticsearch 중 무엇을 택하겠습니까?**
+> "Elasticsearch는 로그 본문을 인덱싱해 검색 성능이 좋지만 운영 비용이 큽니다. Loki는 레이블만 인덱싱해 저장 비용이 낮고 Grafana에 네이티브로 통합됩니다. 연암 테스터는 이미 Prometheus + Grafana를 쓰고 있고 t2.micro 한 대에서 돌기 때문에, 리소스 관점에서 Loki가 맞습니다. 현재는 둘 다 없고 `docker logs`로 확인하고 있습니다."
 
-**Q4. 분산 트레이싱을 통해 실제로 문제를 해결한 사례가 있나요?**
-> "AI 분석 요청의 p95 응답시간이 갑자기 8초로 올라가는 현상이 발생했습니다. Prometheus만으로는 어느 서비스에서 지연이 발생하는지 알 수 없었습니다. Tempo에서 해당 TraceID를 조회하니 RAG 서버의 FAISS 벡터 검색 Span이 6초를 차지하고 있었습니다. knowledge_base 청크 수가 증가하면서 검색 비용이 늘어난 것으로, FAISS index를 IVF(Inverted File Index)로 교체해 검색 시간을 1초 이하로 줄였습니다."
+**Q4. 분산 트레이싱으로 문제를 해결한 경험이 있나요?**
+> "분산 트레이싱은 도입하지 않았으니 그 경험은 없습니다. 대신 트레이싱 없이도 단계별 지연을 볼 수 있게 파이프라인 각 단계(PARSE/CHUNK/INDEX/EXTRACT/RETRIEVE)의 소요 시간을 측정해 응답에 `pipelineTrace`로 담았고, Prometheus Histogram으로 p50/p95를 Grafana에서 확인했습니다. 구조상 가장 비싼 구간은 LLM 호출입니다. 추출된 요구사항마다 LLM을 한 번씩 순차 호출하기 때문에 전체 시간이 요구사항 수에 비례해 늘어납니다. 개선하려면 호출을 병렬화하거나 배치로 묶어야 하는데, t2.micro 메모리 제약 때문에 지금은 의도적으로 직렬을 유지하고 있습니다."
 
 ---
 
 ## 전체 면접 대비 — 통합 질문
 
-**Q. 온프레미스에서 클라우드로 전환한 경험을 설명해주세요.**
-> "연암 테스터는 처음에 개발자 로컬 머신에서만 Docker Compose로 실행되는 구조였습니다. 이를 AWS EC2로 배포하는 과정에서 세 가지 단계를 거쳤습니다. 첫째, 수동 AWS 콘솔 배포에서 Terraform IaC로 인프라를 코드화했습니다. 둘째, 단일 EC2 Docker Compose에서 K8s로 전환해 컨테이너 오케스트레이션을 도입했습니다. 셋째, 단일 AZ에서 멀티 AZ ALB+ASG로 고가용성을 확보했습니다. 각 단계마다 이전 상태의 문제점을 인식하고 해결하는 방식으로 진행했습니다."
+**Q. 로컬 환경에서 클라우드로 전환한 경험을 설명해주세요.**
+> "연암 테스터는 처음에 제 로컬 머신의 Docker Compose에서만 동작했습니다. 이를 AWS EC2 Ubuntu에 배포하면서 퍼블릭 서브넷, 보안 그룹, IAM Instance Profile 기반 인증, S3 연동, Bedrock 호출 구조를 구성했습니다. 특히 NAT Gateway를 두지 않고 퍼블릭 서브넷 EC2가 인터넷 게이트웨이로 AWS API와 통신하게 설계해 고정 비용을 줄였습니다. 배포는 GitHub Actions에서 프론트엔드를 빌드해 SCP로 전송하고 SSH로 컨테이너를 재기동하는 방식으로 자동화했습니다. 다만 여기까지가 전부입니다. Terraform, Kubernetes, 멀티 AZ는 아직 적용하지 않았고, 단일 EC2 구조를 직접 운영하면서 SPOF와 수동 스케일업, 배포 중 다운타임 같은 한계를 확인한 단계입니다."
 
 **Q. 대용량 트래픽 대응 경험을 설명해주세요.**
-> "AI 분석 요청은 처리 시간이 길어 동시 요청이 몰리면 메모리 부족으로 OOM이 발생했습니다. 세 가지 방법으로 대응했습니다. 첫째, asyncio.Queue 기반 비동기 처리로 요청을 순서대로 처리해 메모리 급증을 방지했습니다. 둘째, HPA로 CPU 70% 초과 시 RAG 서버를 자동 스케일 아웃했습니다. 셋째, Prometheus로 queue depth와 처리 latency를 모니터링해 병목 지점을 실시간으로 파악했습니다."
+> "솔직히 말씀드리면 대용량 트래픽을 받아 본 경험은 없습니다. 개인 프로젝트이고 t2.micro 한 대에서 운영했습니다. 다만 자원이 극도로 제한된 환경에서 요청이 서버를 죽이는 문제는 겪었고, 그걸 해결했습니다. AI 분석 요청이 동시에 들어오면 메모리 사용량이 급증해 컨테이너가 불안정해졌습니다. 세 가지로 대응했습니다. 첫째, `asyncio.Queue`에 워커를 1개만 둬서 분석 작업을 직렬 처리해 동시 실행을 원천 차단했습니다. 둘째, 긴 작업을 202 Accepted + 웹훅 콜백 구조로 분리해 HTTP 타임아웃을 없앴습니다. 셋째, cAdvisor로 컨테이너별 메모리를 관찰하며 평가 실행 간격(케이스 간 5초 대기)을 조정했습니다. 스케일 아웃이 아니라 스케일을 1로 묶어서 버틴 것이고, 트래픽이 실제로 늘어난다면 큐를 외부 브로커로 빼고 워커를 수평 확장하는 방향이 맞다고 생각합니다."
+
+**Q. 이 프로젝트에서 가장 아쉬운 점은 무엇인가요?**
+> "배포 파이프라인이 테스트를 통과 조건으로 삼지 않는 점입니다. rag_server에 테스트 54개를 작성하고 CI에서 실제 Qdrant를 띄워 통합 검증까지 하는데, 그 워크플로우가 배포의 전제 조건이 아니라 별도로 돕니다. 즉 테스트가 깨진 상태로도 main에 푸시하면 배포가 됩니다. 테스트를 공들여 만들어 놓고 정작 배포를 막는 데 쓰지 않은 게 가장 아쉽고, 가장 먼저 고칠 부분이라고 생각합니다."
 
 ---
 
 ## 실습 체크리스트
 
-각 항목을 직접 구현했다면 면접에서 깊이 있는 답변이 가능합니다.
+각 항목을 **직접 구현했을 때만** 면접에서 해당 경험을 주장할 수 있습니다. 체크되지 않은 항목은 "개념은 알지만 해보지 않았다"로 답하는 것이 맞습니다.
 
 ### Phase 1 체크리스트
 - [ ] `terraform init` → `plan` → `apply`로 EC2 인스턴스 생성해본 경험
@@ -344,6 +372,7 @@ otel:
 
 ### Phase 2 체크리스트
 - [ ] minikube 클러스터에 모든 서비스 Deployment 배포
+- [ ] Qdrant를 StatefulSet + PVC로 배치하고 Pod 재시작 후 데이터 유지 확인
 - [ ] `kubectl rollout undo` 롤백 실습
 - [ ] HPA 설정 후 부하 테스트로 자동 스케일 확인 (k6 또는 wrk 사용)
 - [ ] nginx-ingress로 경로 기반 라우팅 설정
@@ -360,7 +389,16 @@ otel:
 - [ ] Loki + Promtail로 컨테이너 로그 수집 및 Grafana에서 조회
 - [ ] OpenTelemetry SDK 적용 후 Tempo에서 TraceID 조회
 - [ ] Grafana SLO 대시보드 구성 (error rate, p95 latency 패널)
-- [ ] Grafana 대시보드 JSON 파일로 프로비저닝 자동화
+- [x] Grafana 대시보드 JSON 파일로 프로비저닝 자동화 — **구현 완료** (`grafana/dashboards/yeonam-overview.json`, 16패널)
+
+### 이미 구현해 둔 것 (면접에서 주장 가능)
+- [x] Docker Compose 10개 컨테이너 운영, multi-stage 빌드 + non-root 실행 (Spring Boot)
+- [x] GitHub Actions 4개 워크플로우 (EC2 배포 / 테스트 / 품질 평가 / GH Pages)
+- [x] CI에서 서비스 컨테이너로 실제 Qdrant를 띄워 통합 테스트, skip 감지 시 워크플로우 실패 처리
+- [x] Prometheus 6 job + 커스텀 Counter/Histogram + Pushgateway로 배치 메트릭 수집
+- [x] LangChain + Qdrant RAG 파이프라인 (멱등 upsert, payload 인덱스 부분 삭제, 차원 불일치 fail-fast)
+- [x] 202 Accepted + 인메모리 큐 + 웹훅 콜백(지수 백오프 3회) + 프론트 폴링 비동기 구조
+- [x] IAM Instance Profile 기반 AWS 인증, NAT Gateway 배제 비용 최적화
 
 ---
 

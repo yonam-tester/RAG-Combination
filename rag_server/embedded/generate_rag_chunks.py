@@ -8,7 +8,13 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 OUTPUT_PATH = BASE_DIR.parent / "rag_chunks.jsonl"
 SUMMARY_PATH = BASE_DIR.parent / "parsing_summary.md"
-INPUT_PATHS = sorted(BASE_DIR.glob("*_knowledge_cards.json"))
+
+# 지식카드의 단일 출처는 knowledge_base/다. ingestion.py의 폴백 경로도 같은 곳을 읽는다.
+# 이전에는 embedded/ 안의 복사본을 "*_knowledge_cards.json"으로 globbing했는데,
+# 그 결과 (1) embedded/에 복사되지 않은 ms_playbook과
+# (2) 파일명이 패턴에 안 맞는 atlassian_..._refined.json이 조용히 누락됐다.
+INPUT_DIR = BASE_DIR.parent / "knowledge_base"
+INPUT_PATHS = sorted(INPUT_DIR.glob("*.json"))
 MIN_CONTENT_LENGTH = 300
 MAX_CONTENT_LENGTH = 800
 
