@@ -11,10 +11,13 @@ python-docx==1.1.2
 prometheus_client>=0.20.0
 
 # LangChain + Qdrant RAG 스택
+# sentence-transformers는 langchain-huggingface의 optional extra라 pip가
+# 자동으로 끌어오지 않는다 — 명시적으로 추가해야 한다.
 langchain-core>=0.3,<2.0
 langchain-text-splitters>=0.3,<2.0
 langchain-qdrant>=0.2,<2.0
 langchain-huggingface>=0.1,<2.0
+sentence-transformers>=3.0,<6.0
 qdrant-client>=1.12,<2.0
 
 # 테스트
